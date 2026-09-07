@@ -183,13 +183,7 @@ function simulateImprovedTrigger(entry: EvalEntry): boolean {
 // Compute realistic before/after scores from simulation
 // ---------------------------------------------------------------------------
 
-function computeAccuracy(triggerFn: (entry: EvalEntry) => boolean): {
-  total: number;
-  passed: number;
-  pass_rate: number;
-  false_negatives: EvalEntry[];
-  false_positives: EvalEntry[];
-} {
+function computeAccuracy(triggerFn: (entry: EvalEntry) => boolean) {
   let passed = 0;
   const false_negatives: EvalEntry[] = [];
   const false_positives: EvalEntry[] = [];

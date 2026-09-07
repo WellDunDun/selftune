@@ -5,23 +5,19 @@ import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
 
 import { CLIError } from "@selftune/runtime/utils/cli-error";
+import type {
+  ProjectConfigurationInput,
+  ProjectConfigurationPlan,
+  applyProjectConfiguration,
+} from "@selftune/runtime/project-provisioning";
 
-export interface ProjectConfigurationInput {
-  readonly projectRoot: string;
-  readonly skillSetIds: ReadonlyArray<string>;
-}
+export type { ProjectConfigurationInput } from "@selftune/runtime/project-provisioning";
 
 export type ProjectAction = (
   operation: "plan" | "configure" | "init",
   input: ProjectConfigurationInput,
   jsonRequested: boolean,
 ) => Effect.Effect<void, CLIError>;
-
-interface ProjectModule {
-  readonly planProjectConfiguration: (input: ProjectConfigurationInput) => unknown;
-  readonly applyProjectConfiguration: (input: ProjectConfigurationInput) => Promise<unknown>;
-  readonly initializeReactProject: (input: ProjectConfigurationInput) => Promise<unknown>;
-}
 
 const PROJECT_HELP = `selftune project — Set up project Skill Sets
 
@@ -42,28 +38,24 @@ function toCliError(operation: string, cause: unknown): CLIError {
       );
 }
 
-function format(value: unknown, json: boolean): string {
+export function formatProjectResult(
+  value: ProjectConfigurationPlan | Awaited<ReturnType<typeof applyProjectConfiguration>>,
+  json: boolean,
+): string {
   if (json) return JSON.stringify(value, null, 2);
-  if (typeof value === "object" && value !== null && "plan" in value) {
-    const result = value as { plan: { creates: number; unchanged: number; conflicts: number } };
-    return `Configured project: ${result.plan.creates} create, ${result.plan.unchanged} unchanged, ${result.plan.conflicts} conflicts.`;
+  if ("plan" in value) {
+    return `Configured project: ${value.plan.creates} create, ${value.plan.unchanged} unchanged, ${value.plan.conflicts} conflicts.`;
   }
-  const plan = value as {
-    creates: number;
-    unchanged: number;
-    conflicts: number;
-    missingDependencies: number;
-  };
-  return `${plan.creates} create, ${plan.unchanged} unchanged, ${plan.conflicts} conflicts, ${plan.missingDependencies} download${plan.missingDependencies === 1 ? "" : "s"}.`;
+  return `${value.creates} create, ${value.unchanged} unchanged, ${value.conflicts} conflicts, ${value.missingDependencies} download${value.missingDependencies === 1 ? "" : "s"}.`;
 }
 
 export function makeLiveProjectAction(): ProjectAction {
   return (operation, input, jsonRequested) =>
     Effect.gen(function* () {
-      const runtime = (yield* Effect.tryPromise({
+      const runtime = yield* Effect.tryPromise({
         try: () => import("@selftune/runtime/project-provisioning"),
         catch: (cause) => toCliError(operation, cause),
-      })) as ProjectModule;
+      });
       const value = yield* operation === "plan"
         ? Effect.try({
             try: () => runtime.planProjectConfiguration(input),
@@ -76,7 +68,9 @@ export function makeLiveProjectAction(): ProjectAction {
                 : runtime.applyProjectConfiguration(input),
             catch: (cause) => toCliError(operation, cause),
           });
-      yield* Console.log(format(value, jsonRequested || process.stdout.isTTY !== true));
+      yield* Console.log(
+        formatProjectResult(value, jsonRequested || process.stdout.isTTY !== true),
+      );
     });
 }
 

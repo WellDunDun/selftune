@@ -245,7 +245,6 @@ describe("historical task-quality candidate", () => {
       }).pipe(Effect.provide(losingLayer)),
     );
     const noWinnerDraftId = noWinner.draft_id;
-    expect(typeof noWinnerDraftId).toBe("string");
     expect(noWinner).toMatchObject({
       readiness: "not_ready",
       draft_id: expect.any(String),

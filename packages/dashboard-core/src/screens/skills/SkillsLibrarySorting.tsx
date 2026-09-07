@@ -56,8 +56,7 @@ function sortConnectionsValue(skill: LibrarySkillModel): string | null {
 }
 
 function sortTriggerValue(skill: LibrarySkillModel): number | null {
-  return typeof skill.lifetimeTriggerCount === "number" &&
-    Number.isFinite(skill.lifetimeTriggerCount)
+  return skill.lifetimeTriggerCount != null && Number.isFinite(skill.lifetimeTriggerCount)
     ? skill.lifetimeTriggerCount
     : null;
 }

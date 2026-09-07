@@ -1,7 +1,6 @@
 import type { getDb } from "@selftune/local-store";
 import type { HarnessSourceRegistry } from "@selftune/harness-core/source-adapter";
 import type { SyncPhaseTiming, SyncResult, SyncStepResult } from "@selftune/source-management/sync";
-import type { UploadCycleSummary } from "@selftune/runtime/alpha-upload/index";
 
 export type { SyncPhaseTiming, SyncResult, SyncStepResult };
 
@@ -76,7 +75,6 @@ export interface SyncProgramInput {
 
 export interface SyncProgramResult {
   readonly sync: SyncResult;
-  readonly alphaUpload?: UploadCycleSummary;
   readonly stdout: ReadonlyArray<string>;
   readonly stderr: ReadonlyArray<string>;
   readonly exitCode: 0;

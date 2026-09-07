@@ -1,4 +1,10 @@
 import type { Database } from "bun:sqlite";
+import type {
+  grading_results,
+  grading_baselines,
+  improvement_signals,
+  replay_entry_results,
+} from "../drizzle-schema.js";
 
 export function queryImprovementSignals(
   db: Database,
@@ -16,65 +22,32 @@ export function queryImprovementSignals(
   const where =
     consumedOnly === undefined ? "" : consumedOnly ? " WHERE consumed = 1" : " WHERE consumed = 0";
   const rows = db
-    .query(`SELECT * FROM improvement_signals${where} ORDER BY timestamp DESC`)
-    .all() as Array<Record<string, unknown>>;
+    .query<typeof improvement_signals.$inferSelect, []>(
+      `SELECT * FROM improvement_signals${where} ORDER BY timestamp DESC`,
+    )
+    .all();
   return rows.map((row) => ({
-    timestamp: row.timestamp as string,
-    session_id: row.session_id as string,
-    query: row.query as string,
-    signal_type: row.signal_type as string,
-    mentioned_skill: row.mentioned_skill as string | undefined,
-    consumed: (row.consumed as number) === 1,
-    consumed_at: row.consumed_at as string | undefined,
-    consumed_by_run: row.consumed_by_run as string | undefined,
+    timestamp: row.timestamp,
+    session_id: row.session_id,
+    query: row.query,
+    signal_type: row.signal_type,
+    mentioned_skill: row.mentioned_skill ?? undefined,
+    consumed: row.consumed === 1,
+    consumed_at: row.consumed_at ?? undefined,
+    consumed_by_run: row.consumed_by_run ?? undefined,
   }));
 }
 
-export function queryGradingResults(db: Database): Array<{
-  grading_id: string;
-  session_id: string;
-  skill_name: string;
-  transcript_path: string | null;
-  graded_at: string;
-  pass_rate: number | null;
-  mean_score: number | null;
-  score_std_dev: number | null;
-  passed_count: number | null;
-  failed_count: number | null;
-  total_count: number | null;
-  expectations_json: string | null;
-  claims_json: string | null;
-  eval_feedback_json: string | null;
-  failure_feedback_json: string | null;
-  execution_metrics_json: string | null;
-}> {
+export function queryGradingResults(db: Database) {
   return db
-    .query(
+    .query<typeof grading_results.$inferSelect, []>(
       `SELECT grading_id, session_id, skill_name, transcript_path, graded_at,
-              pass_rate, mean_score, score_std_dev, passed_count, failed_count, total_count,
-              expectations_json, claims_json, eval_feedback_json, failure_feedback_json,
-              execution_metrics_json
-       FROM grading_results
-       ORDER BY graded_at DESC`,
+            pass_rate, mean_score, score_std_dev, passed_count, failed_count, total_count,
+            expectations_json, claims_json, eval_feedback_json, failure_feedback_json,
+            execution_metrics_json
+     FROM grading_results ORDER BY graded_at DESC`,
     )
-    .all() as Array<{
-    grading_id: string;
-    session_id: string;
-    skill_name: string;
-    transcript_path: string | null;
-    graded_at: string;
-    pass_rate: number | null;
-    mean_score: number | null;
-    score_std_dev: number | null;
-    passed_count: number | null;
-    failed_count: number | null;
-    total_count: number | null;
-    expectations_json: string | null;
-    claims_json: string | null;
-    eval_feedback_json: string | null;
-    failure_feedback_json: string | null;
-    execution_metrics_json: string | null;
-  }>;
+    .all();
 }
 
 export function queryReplayEntryResults(
@@ -105,21 +78,20 @@ export function queryReplayEntryResults(
        WHERE proposal_id = ?
        ORDER BY id`;
 
-  const rows = phase
-    ? (db.query(sql).all(proposalId, phase) as Array<Record<string, unknown>>)
-    : (db.query(sql).all(proposalId) as Array<Record<string, unknown>>);
+  const statement = db.query<typeof replay_entry_results.$inferSelect, string[]>(sql);
+  const rows = phase ? statement.all(proposalId, phase) : statement.all(proposalId);
 
   return rows.map((row) => ({
-    id: row.id as number,
-    proposal_id: row.proposal_id as string,
-    skill_name: row.skill_name as string,
-    validation_mode: row.validation_mode as string,
-    phase: row.phase as string,
-    query: row.query as string,
-    should_trigger: (row.should_trigger as number) === 1,
-    triggered: (row.triggered as number) === 1,
-    passed: (row.passed as number) === 1,
-    evidence: row.evidence as string | null,
+    id: row.id,
+    proposal_id: row.proposal_id,
+    skill_name: row.skill_name,
+    validation_mode: row.validation_mode,
+    phase: row.phase,
+    query: row.query,
+    should_trigger: row.should_trigger === 1,
+    triggered: row.triggered === 1,
+    passed: row.passed === 1,
+    evidence: row.evidence,
   }));
 }
 
@@ -133,7 +105,10 @@ export function queryReplayRegressions(
   after_passed: boolean;
 }> {
   const rows = db
-    .query(
+    .query<
+      { query: string; skill_name: string; before_passed: number; after_passed: number },
+      [string]
+    >(
       `SELECT b.query, b.skill_name,
               b.passed AS before_passed,
               a.passed AS after_passed
@@ -149,26 +124,17 @@ export function queryReplayRegressions(
          AND a.passed = 0
        ORDER BY b.query`,
     )
-    .all(proposalId) as Array<Record<string, unknown>>;
+    .all(proposalId);
 
   return rows.map((row) => ({
-    query: row.query as string,
-    skill_name: row.skill_name as string,
-    before_passed: (row.before_passed as number) === 1,
-    after_passed: (row.after_passed as number) === 1,
+    query: row.query,
+    skill_name: row.skill_name,
+    before_passed: row.before_passed === 1,
+    after_passed: row.after_passed === 1,
   }));
 }
 
-export interface GradingBaselineRow {
-  id: number;
-  skill_name: string;
-  proposal_id: string | null;
-  measured_at: string;
-  pass_rate: number;
-  mean_score: number | null;
-  sample_size: number;
-  grading_results_json: string | null;
-}
+export type GradingBaselineRow = typeof grading_baselines.$inferSelect;
 
 export interface GradeRegressionResult {
   before: GradingBaselineRow;
@@ -184,28 +150,24 @@ export function queryGradingBaseline(
   proposalId?: string,
 ): GradingBaselineRow | null {
   if (proposalId !== undefined) {
-    return (
-      (db
-        .query(
-          `SELECT * FROM grading_baselines
+    return db
+      .query<GradingBaselineRow, [string, string]>(
+        `SELECT * FROM grading_baselines
            WHERE skill_name = ? AND proposal_id = ?
            ORDER BY measured_at DESC
            LIMIT 1`,
-        )
-        .get(skillName, proposalId) as GradingBaselineRow | null) ?? null
-    );
+      )
+      .get(skillName, proposalId);
   }
 
-  return (
-    (db
-      .query(
-        `SELECT * FROM grading_baselines
+  return db
+    .query<GradingBaselineRow, [string]>(
+      `SELECT * FROM grading_baselines
          WHERE skill_name = ? AND proposal_id IS NULL
          ORDER BY measured_at DESC
          LIMIT 1`,
-      )
-      .get(skillName) as GradingBaselineRow | null) ?? null
-  );
+    )
+    .get(skillName);
 }
 
 export function queryGradeRegression(
@@ -251,7 +213,7 @@ export function queryRecentGradingResults(
   limit: number = 20,
 ): RecentGradingResultRow[] {
   return db
-    .query(
+    .query<RecentGradingResultRow, [string, number]>(
       `SELECT grading_id, session_id, skill_name, graded_at,
               pass_rate, mean_score, total_count, passed_count, failed_count
        FROM grading_results
@@ -259,5 +221,5 @@ export function queryRecentGradingResults(
        ORDER BY graded_at DESC
        LIMIT ?`,
     )
-    .all(skillName, limit) as RecentGradingResultRow[];
+    .all(skillName, limit);
 }

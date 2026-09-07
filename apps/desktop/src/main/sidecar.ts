@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import { app } from "electron";
+import { Option, Schema } from "effect";
 
 import {
   loadOrCreateLocalAuthToken,
@@ -18,7 +19,7 @@ import {
 } from "@selftune/local/local-runtime";
 import { resolveLoginShellPath } from "@selftune/runtime/login-shell-path";
 import { developmentRendererProxyUrl } from "./development-renderer";
-import { createLineBuffer, parseReadyPort } from "./sidecar-protocol";
+import { createLineBuffer, parseReadyPort, SidecarHealth } from "./sidecar-protocol";
 import { installedRuntimeRoot } from "./runtime-install";
 
 const STARTUP_TIMEOUT_MS = 20_000;
@@ -43,14 +44,7 @@ function selfTuneRoot(): string {
   return resolve(app.getAppPath(), "../..");
 }
 
-function resolveCommand(): {
-  command: string;
-  cliArgs: string[];
-  cwd: string;
-  spaDir: string;
-  spaProxyUrl: string | null;
-  taskCliPath?: string;
-} {
+function resolveCommand() {
   if (app.isPackaged) {
     const executable = process.platform === "win32" ? "selftune.exe" : "selftune";
     const resourceRoot = installedRuntimeRoot();
@@ -114,6 +108,22 @@ export async function startSidecar(signal?: AbortSignal): Promise<SidecarConnect
     throw new Error(`Dashboard assets are missing at ${spaDir}.`);
   }
 
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    PATH: resolveLoginShellPath(),
+    SELFTUNE_DESKTOP: "1",
+    SELFTUNE_RUNTIME_OWNER: "desktop",
+    SELFTUNE_SUPERVISED: "0",
+    SELFTUNE_VERSION: app.getVersion(),
+    SELFTUNE_CONFIG_DIR: configDir(),
+  };
+  if (spaProxyUrl !== null) env.SPA_PROXY_URL = spaProxyUrl;
+  if (taskCliPath) {
+    env.SELFTUNE_BIN_PATH = taskCliPath;
+    env.SELFTUNE_DESKTOP_RESOURCE_DIR = cwd;
+    env.NODE_PATH = join(cwd, "node_modules");
+  }
+
   const child = spawn(
     command,
     [
@@ -134,23 +144,7 @@ export async function startSidecar(signal?: AbortSignal): Promise<SidecarConnect
     ],
     {
       cwd,
-      env: {
-        ...process.env,
-        PATH: resolveLoginShellPath(),
-        SELFTUNE_DESKTOP: "1",
-        SELFTUNE_RUNTIME_OWNER: "desktop",
-        SELFTUNE_SUPERVISED: "0",
-        SELFTUNE_VERSION: app.getVersion(),
-        SELFTUNE_CONFIG_DIR: configDir(),
-        ...(spaProxyUrl === null ? {} : { SPA_PROXY_URL: spaProxyUrl }),
-        ...(taskCliPath
-          ? {
-              SELFTUNE_BIN_PATH: taskCliPath,
-              SELFTUNE_DESKTOP_RESOURCE_DIR: cwd,
-              NODE_PATH: join(cwd, "node_modules"),
-            }
-          : {}),
-      },
+      env,
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
@@ -241,6 +235,15 @@ export async function startSidecar(signal?: AbortSignal): Promise<SidecarConnect
 
 async function stopDetachedDesktopChild(connection: SidecarConnection): Promise<void> {
   const { command, cliArgs, cwd, taskCliPath } = resolveCommand();
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    PATH: resolveLoginShellPath(),
+    SELFTUNE_CONFIG_DIR: configDir(),
+    SELFTUNE_DESKTOP: "1",
+    SELFTUNE_RUNTIME_OWNER: "desktop",
+    SELFTUNE_VERSION: app.getVersion(),
+  };
+  if (taskCliPath) env.SELFTUNE_BIN_PATH = taskCliPath;
   await execFileAsync(
     command,
     [
@@ -257,15 +260,7 @@ async function stopDetachedDesktopChild(connection: SidecarConnection): Promise<
     {
       cwd,
       encoding: "utf8",
-      env: {
-        ...process.env,
-        PATH: resolveLoginShellPath(),
-        SELFTUNE_CONFIG_DIR: configDir(),
-        SELFTUNE_DESKTOP: "1",
-        SELFTUNE_RUNTIME_OWNER: "desktop",
-        SELFTUNE_VERSION: app.getVersion(),
-        ...(taskCliPath ? { SELFTUNE_BIN_PATH: taskCliPath } : {}),
-      },
+      env,
       timeout: 15_000,
     },
   );
@@ -291,10 +286,6 @@ function isPidAlive(pid: number): boolean {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 async function attachToManifest(manifest: ServerManifest): Promise<SidecarConnection | null> {
   const localConfigDir = configDir();
   const authToken = loadOrCreateLocalAuthToken(localConfigDir);
@@ -303,14 +294,14 @@ async function attachToManifest(manifest: ServerManifest): Promise<SidecarConnec
       headers: { Authorization: `Bearer ${authToken}` },
       signal: AbortSignal.timeout(1_500),
     });
-    const payload: unknown = response.ok ? await response.json() : null;
+    const payload = Schema.decodeUnknownOption(SidecarHealth)(
+      response.ok ? await response.json() : null,
+    );
     if (
-      isRecord(payload) &&
-      payload.pid === manifest.pid &&
-      payload.runtime_instance_id === manifest.instance_id &&
-      payload.process_mode === "standalone" &&
-      typeof payload.config_dir === "string" &&
-      resolve(payload.config_dir) === resolve(localConfigDir)
+      Option.isSome(payload) &&
+      payload.value.pid === manifest.pid &&
+      payload.value.runtime_instance_id === manifest.instance_id &&
+      resolve(payload.value.config_dir) === resolve(localConfigDir)
     ) {
       return {
         authToken,

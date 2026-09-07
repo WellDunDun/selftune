@@ -267,7 +267,7 @@ function installResult(
 }
 
 export async function applyDesktopOnboarding(
-  input: ApplyOnboardingRequest | unknown,
+  input: ApplyOnboardingRequest,
   options: OnboardingEnvironment = {},
 ): Promise<ApplyOnboardingResponse> {
   const preferences = normalizeOnboardingRequest(input);

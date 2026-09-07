@@ -163,25 +163,6 @@ function batchConditionalResponse(
 // ---------------------------------------------------------------------------
 
 describe("validateProposal", () => {
-  test("returns correct ValidationResult structure", async () => {
-    mockCallLlm.mockImplementation(async (_sys: string, user: string) =>
-      batchAllResponse(user, "NO"),
-    );
-
-    const proposal = makeProposal();
-    const evalSet: EvalEntry[] = [makeEval("run tests", true), makeEval("unrelated query", false)];
-
-    const result = await validateProposal(proposal, evalSet, "claude");
-
-    expect(result.proposal_id).toBe("prop-test-001");
-    expect(typeof result.before_pass_rate).toBe("number");
-    expect(typeof result.after_pass_rate).toBe("number");
-    expect(typeof result.improved).toBe("boolean");
-    expect(Array.isArray(result.regressions)).toBe(true);
-    expect(Array.isArray(result.new_passes)).toBe(true);
-    expect(typeof result.net_change).toBe("number");
-  });
-
   test("computes pass rates correctly when LLM always says NO", async () => {
     mockCallLlm.mockImplementation(async (_sys: string, user: string) =>
       batchAllResponse(user, "NO"),
@@ -195,6 +176,7 @@ describe("validateProposal", () => {
     ];
 
     const result = await validateProposal(proposal, evalSet, "claude");
+    expect(result.proposal_id).toBe("prop-test-001");
 
     // All NO: 2 should_trigger fail, 1 negative passes -> 1/3
     expect(result.before_pass_rate).toBeCloseTo(1 / 3, 5);

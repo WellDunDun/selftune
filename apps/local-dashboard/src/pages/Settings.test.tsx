@@ -1,126 +1,80 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { DesktopSettingsResponse } from "@/types";
-
-const useSettingsMock = vi.hoisted(() => vi.fn());
-
-vi.mock("@/hooks/useSettings", () => {
-  const mutation = () => ({
-    data: undefined,
-    isPending: false,
-    mutate: vi.fn(),
-  });
-
-  return {
-    useSettings: useSettingsMock,
-    useCreateRemoteLibraryShare: mutation,
-    useExportRemoteLibrary: mutation,
-    useInviteWorkspaceMember: mutation,
-    useLinkCloudAccount: mutation,
-    usePreviewRemoteLibrary: mutation,
-    useRemoteLibraryShareAction: mutation,
-    useRemoveWorkspaceMember: mutation,
-    useResetWorkspaceSkillSetPolicy: mutation,
-    useRestoreRemoteLibrary: mutation,
-    useSyncRemoteLibrary: mutation,
-    useUpdateRemoteLibrarySettings: mutation,
-    useUpdateScheduleSettings: mutation,
-    useUpdateWorkspaceMemberRole: mutation,
-    useUpdateWorkspaceSkillSetPolicy: mutation,
-    useRemoteLibraryStatus: () => ({ data: undefined, isError: false }),
-    useRemoteLibraryShares: () => ({ data: undefined }),
-    useWorkspaceSkillSetPolicies: () => ({ data: undefined, isLoading: false }),
-    useWorkspaceMembers: () => ({ data: undefined, isLoading: false }),
-  };
-});
-
+import { settingsFor } from "../test-fixtures/settings";
 import { Settings } from "./Settings";
 
-function settingsFor(url: string): DesktopSettingsResponse {
-  return {
-    harnesses: [],
-    agent_skill: {
-      installed: true,
-      locations: [],
-      install_command: "npx skills add selftune-dev/selftune",
-    },
-    onboarding: {
-      version: 1,
-      completed: true,
-      import_sources: {
-        claude_code: false,
-        cline: false,
-        codex: false,
-        opencode: false,
-        openclaw: false,
-        pi: false,
-      },
-      hook_harnesses: {
-        claude_code: false,
-        cline: false,
-        codex: false,
-        opencode: false,
-        pi: false,
-      },
-      features: {
-        observability: true,
-        health_recommendations: true,
-        autonomous_improvement: false,
-      },
-    },
-    cloud_account: {
-      linked: true,
-      cloud_user_id: "user-1",
-      cloud_org_id: "workspace-1",
-    },
-    remote_library: {
-      configured: true,
-      credential_provider: null,
-      url,
-      preferences: {
-        releasedSkills: false,
-        drafts: false,
-        skillSets: false,
-        metadata: false,
-        decisionHistory: false,
-      },
-    },
-    schedule: {
-      supported: true,
-      format: "launchd",
-      settings_path: "/tmp/jobs.json",
-      jobs: [],
-    },
-  };
-}
+const clients: QueryClient[] = [];
 
-function renderSettings(url: string) {
-  useSettingsMock.mockReturnValue({
-    data: settingsFor(url),
-    isError: false,
-    isFetching: false,
-    isLoading: false,
-    refetch: vi.fn(),
+function renderSettings(url: string, route = "/settings?section=remote-library") {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    if (input === "/api/v2/settings") return Response.json(settingsFor(url));
+    if (
+      [
+        "/api/v2/settings/remote-library/status",
+        "/api/v2/settings/remote-library/shares",
+        "/api/v2/settings/workspace/members",
+        "/api/v2/settings/workspace/policies",
+      ].includes(String(input))
+    ) {
+      return new Response("Service unavailable", { status: 503 });
+    }
+    throw new Error(`Unexpected request: ${input}`);
   });
-
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+  });
+  clients.push(client);
   return render(
-    <MemoryRouter initialEntries={["/settings?section=remote-library"]}>
-      <Settings />
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[route]}>
+        <Settings />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
 afterEach(() => {
   cleanup();
-  useSettingsMock.mockReset();
+  for (const client of clients.splice(0)) client.clear();
+  vi.restoreAllMocks();
 });
 
 describe("Settings remote-library capabilities", () => {
-  it("shows complete backup actions only for a configured self-hosted server", async () => {
+  it("renders a newly available automation job before the draft synchronization effect runs", async () => {
+    const url = "https://cloud.selftune.dev";
+    renderSettings(url, "/settings?section=automation");
+    await screen.findByText("Run local collection and improvement jobs in the background.");
+    const settings = settingsFor(url);
+    act(() =>
+      clients.at(-1)?.setQueryData(["settings"], {
+        ...settings,
+        schedule: {
+          ...settings.schedule,
+          jobs: [
+            {
+              id: "selftune-sync",
+              label: "Collect",
+              description: "Import local sessions",
+              command: "selftune sync",
+              default_schedule: "*/30 * * * *",
+              schedule: "*/15 * * * *",
+              enabled: false,
+              active: false,
+            },
+          ],
+        },
+      }),
+    );
+    expect(await screen.findByRole("switch", { name: "Enable Collect" })).not.toBeNull();
+    expect(screen.getByRole("combobox", { name: "Collect frequency" })).not.toBeNull();
+  });
+
+  it("shows backup controls only for self-hosting, even when remote status is unavailable", async () => {
     const cloud = renderSettings("https://cloud.selftune.dev");
 
     await screen.findByRole("heading", {

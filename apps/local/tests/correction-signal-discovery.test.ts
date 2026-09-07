@@ -66,6 +66,56 @@ afterEach(() => {
 });
 
 describe("explicit correction signal discovery", () => {
+  test("skips malformed captures without changing the retained artifact digest", () => {
+    const sqlite = database();
+    insertCanonicalRows(sqlite, { invocationRevision: null });
+    const artifact = {
+      event_type: "skill_md_edit_capture",
+      status: "captured",
+      session_id: "session-1",
+      target_digest: createHash("sha256").update("/local/release-checklist/SKILL.md").digest("hex"),
+      pre_revision: before,
+      post_revision: after,
+      pre_captured_at: "2026-07-29T10:05:15.000Z",
+      post_captured_at: "2026-07-29T10:05:30.000Z",
+      source_extension: { harness_version: "future-compatible" },
+    };
+    const serialized = JSON.stringify(artifact);
+    const signals = discoverExplicitCorrectionSignals(sqlite, {
+      inspectSkill: () => ({ revision: null, modified_at: null }),
+      readRawSource: () => null,
+      readSkillEditCaptures: () =>
+        [
+          "null",
+          "{broken",
+          JSON.stringify({ ...artifact, pre_revision: 42 }),
+          JSON.stringify({ ...artifact, post_captured_at: {} }),
+          serialized,
+        ].join("\n"),
+    });
+    expect(signals).toHaveLength(1);
+    expect(signals[0]).toMatchObject({
+      reason: "captured_package_revisions",
+      raw_edit_digest: createHash("sha256").update(serialized).digest("hex"),
+      proves_causality: false,
+      review_status: "review_required",
+    });
+  });
+
+  test.each(
+    [
+      null,
+      [],
+      { prompt_at: "not-a-date", prompt_id: "prompt-1" },
+      { prompt_at: "2026-09-05", prompt_id: 1 },
+    ].map((value) => ({ value })),
+  )("rejects malformed decoded cursor fields: %j", ({ value }) => {
+    const cursor = Buffer.from(JSON.stringify(value)).toString("base64url");
+    expect(() => discoverExplicitCorrectionSignalPage(database(), { cursor })).toThrow(
+      "cursor is invalid",
+    );
+  });
+
   test("discovers a bounded, redacted hash-backed hypothesis without writing a study", () => {
     const sqlite = database();
     insertCanonicalRows(sqlite);

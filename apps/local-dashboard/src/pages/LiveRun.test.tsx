@@ -1,8 +1,11 @@
-import type { ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
+import { describe, expect, it } from "vitest";
 
 import type { DashboardActionResultSummary } from "@/types";
+import { ingestDashboardActionEvent } from "@/lib/live-action-feed";
+import { LiveRun } from "./LiveRun";
 
 const selectedSummary: DashboardActionResultSummary = {
   reason: "Package evaluation passed",
@@ -145,84 +148,33 @@ const selectedSummary: DashboardActionResultSummary = {
   search_run: null,
 };
 
-const selectedEntry = {
-  id: "event-1",
-  action: "deploy-candidate" as const,
-  skillName: "Taxes",
-  skillPath: "/tmp/Taxes/SKILL.md",
-  status: "success" as const,
-  startedAt: Date.parse("2026-04-14T12:00:00.000Z"),
-  updatedAt: Date.parse("2026-04-14T12:05:00.000Z"),
-  output: [],
-  logs: [],
-  error: null,
-  exitCode: 0,
-  metrics: null,
-  progress: null,
-  summary: selectedSummary,
-};
-
-vi.mock("lucide-react", () => ({
-  __esModule: true,
-  Activity: () => null,
-  ArrowLeft: () => null,
-  Bot: () => null,
-  Boxes: () => null,
-  Cpu: () => null,
-  Loader2: () => null,
-  TerminalSquare: () => null,
-  default: {
-    Activity: () => null,
-    ArrowLeft: () => null,
-    Bot: () => null,
-    Boxes: () => null,
-    Cpu: () => null,
-    Loader2: () => null,
-    TerminalSquare: () => null,
-  },
-}));
-
-vi.mock("@selftune/ui/lib", () => ({
-  timeAgo: () => "just now",
-}));
-
-vi.mock("@selftune/ui/primitives", () => ({
-  Badge: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  Button: ({ children }: { children?: ReactNode }) => <button>{children}</button>,
-  Card: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  CardContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  CardDescription: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  CardHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  CardTitle: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}));
-
-vi.mock("react-router-dom", () => ({
-  Link: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  useSearchParams: () => [new URLSearchParams(), () => {}],
-}));
-
-vi.mock("@/hooks/useSkillReport", () => ({
-  useSkillReport: () => ({
-    data: {
-      session_metadata: [],
-      token_usage: {
-        total_input_tokens: 1234,
-        total_output_tokens: 567,
-      },
-    },
-  }),
-}));
-
-vi.mock("@/lib/live-action-feed", () => ({
-  formatActionLabel: () => "Deploy candidate",
-  useLiveActionFeed: () => [selectedEntry],
-  useSelectedLiveActionEntry: () => selectedEntry,
-}));
+function renderRun(eventId: string, summary: DashboardActionResultSummary) {
+  const event = {
+    event_id: eventId,
+    action: "deploy-candidate",
+    skill_name: "Taxes",
+    skill_path: "/tmp/Taxes/SKILL.md",
+    ts: Date.now(),
+  } as const;
+  ingestDashboardActionEvent({ ...event, stage: "started" });
+  ingestDashboardActionEvent({ ...event, stage: "finished", success: true, summary });
+  const client = new QueryClient();
+  try {
+    return renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[`/live-run?event=${eventId}`]}>
+          <LiveRun />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  } finally {
+    client.clear();
+  }
+}
 
 describe("LiveRun", () => {
-  it("renders measured package evidence, efficiency, watch signal, and next-command guidance", async () => {
-    const { LiveRun } = await import("./LiveRun");
-    const html = renderToStaticMarkup(<LiveRun />);
+  it("renders measured package evidence, efficiency, watch signal, and next-command guidance", () => {
+    const html = renderRun("event-evidence", selectedSummary);
 
     expect(html).toContain("Measured package evidence");
     expect(html).toContain("Evaluation source");
@@ -257,33 +209,29 @@ describe("LiveRun", () => {
     expect(html).toContain("selftune publish --skill-path /tmp/Taxes/SKILL.md");
   });
 
-  it("renders bounded search surface budgeting when present", async () => {
-    selectedEntry.summary.search_run = {
-      search_id: "sr_123",
-      parent_candidate_id: "pkgcand_parent123456",
-      winner_candidate_id: "pkgcand_winner123456",
-      winner_rationale: "Routing weakness dominated the measured gap.",
-      candidates_evaluated: 5,
-      frontier_size: 2,
-      parent_selection_method: "highest_ranked_frontier",
-      surface_plan: {
-        routing_count: 4,
-        body_count: 1,
-        weakness_source: "accepted_frontier",
-        routing_weakness: 0.9,
-        body_weakness: 0.1,
+  it("renders bounded search surface budgeting from the selected event", () => {
+    const html = renderRun("event-search", {
+      ...selectedSummary,
+      search_run: {
+        search_id: "sr_123",
+        parent_candidate_id: "pkgcand_parent123456",
+        winner_candidate_id: "pkgcand_winner123456",
+        winner_rationale: "Routing weakness dominated the measured gap.",
+        candidates_evaluated: 5,
+        frontier_size: 2,
+        parent_selection_method: "highest_ranked_frontier",
+        surface_plan: {
+          routing_count: 4,
+          body_count: 1,
+          weakness_source: "accepted_frontier",
+          routing_weakness: 0.9,
+          body_weakness: 0.1,
+        },
       },
-    };
+    });
 
-    try {
-      const { LiveRun } = await import("./LiveRun");
-      const html = renderToStaticMarkup(<LiveRun />);
-
-      expect(html).toContain("Surface budget");
-      expect(html).toContain("Routing 4, body 1");
-      expect(html).toContain("accepted_frontier");
-    } finally {
-      selectedEntry.summary.search_run = null;
-    }
+    expect(html).toContain("Surface budget");
+    expect(html).toContain("Routing 4, body 1");
+    expect(html).toContain("accepted_frontier");
   });
 });

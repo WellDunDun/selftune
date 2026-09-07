@@ -14,7 +14,7 @@ import {
   runHostRuntimeReplayFixture,
 } from "@selftune/runtime/evolution/validate-host-replay";
 import type { RoutingReplayEntryResult } from "@selftune/runtime/types";
-import { Effect, Schema } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
 
 import type { HistoricalTaskCalibrator } from "./historical-task-candidate.js";
 
@@ -76,7 +76,7 @@ function runtimeAgent(harness: string): string | null {
 }
 
 function boundedCount(value: number | null | undefined): number {
-  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+  return value != null && Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
 }
 
 function processMetrics(result: RoutingReplayEntryResult) {
@@ -94,8 +94,8 @@ function processMetrics(result: RoutingReplayEntryResult) {
   };
 }
 
-function retryableReplayFailure(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
+function retryableReplayFailure(cause: unknown): boolean {
+  const message = cause instanceof Error ? cause.message : String(cause);
   return /(?:timed? ?out|temporar|rate limit|connection|socket|exited with code)/i.test(message);
 }
 
@@ -169,16 +169,18 @@ export function historicalRoutingVerifierQualification(): VerifierQualificationR
       check_description:
         "Stages one frozen skill arm and checks the harness routing events without an LLM judge.",
     },
-    evidence: [
-      { id: "known-failure", label: "known_failure", expected: "reject", observed: "reject" },
-      { id: "known-good", label: "known_good", expected: "accept", observed: "accept" },
-      { id: "boundary", label: "boundary", expected: "reject", observed: "reject" },
-      { id: "adversarial", label: "adversarial", expected: "reject", observed: "reject" },
-    ].map((control) => ({
+    evidence: (
+      [
+        { id: "known-failure", label: "known_failure", expected: "reject", observed: "reject" },
+        { id: "known-good", label: "known_good", expected: "accept", observed: "accept" },
+        { id: "boundary", label: "boundary", expected: "reject", observed: "reject" },
+        { id: "adversarial", label: "adversarial", expected: "reject", observed: "reject" },
+      ] as const
+    ).map((control) => ({
       evidence_id: `historical-routing-${control.id}`,
-      label: control.label as "known_failure" | "known_good" | "boundary" | "adversarial",
-      expected_decision: control.expected as "accept" | "reject",
-      observed_decision: control.observed as "accept" | "reject",
+      label: control.label,
+      expected_decision: control.expected,
+      observed_decision: control.observed,
       partition: "verifier_calibration" as const,
       candidate_strategy_reference: null,
     })),
@@ -236,7 +238,7 @@ export function historicalTaskQualityVerifierQualification(): VerifierQualificat
   });
 }
 
-export function makeHostHistoricalTaskCalibrator(options: {
+function makeHostHistoricalTaskCalibrator(options: {
   readonly agent: string;
   readonly model: string;
 }): HistoricalTaskCalibrator {
@@ -423,4 +425,25 @@ export function makeHostHistoricalSkillReplayExecutorFactory(options?: {
   });
 
   return { create };
+}
+
+export class HostHistoricalSkillReplay extends Context.Service<
+  HostHistoricalSkillReplay,
+  HistoricalSkillReplayExecutorFactory
+>()("@selftune/local/HostHistoricalSkillReplay") {}
+
+export const HostHistoricalSkillReplayLive = Layer.sync(HostHistoricalSkillReplay, () =>
+  makeHostHistoricalSkillReplayExecutorFactory(),
+);
+
+export class HostHistoricalTaskCalibration extends Context.Service<
+  HostHistoricalTaskCalibration,
+  HistoricalTaskCalibrator
+>()("@selftune/local/HostHistoricalTaskCalibration") {}
+
+export function makeHostHistoricalTaskCalibrationLayer(options: {
+  readonly agent: string;
+  readonly model: string;
+}) {
+  return Layer.sync(HostHistoricalTaskCalibration, () => makeHostHistoricalTaskCalibrator(options));
 }

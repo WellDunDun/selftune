@@ -13,18 +13,9 @@ import {
   type RemoteSnapshot,
 } from "@selftune/control-plane";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 
 import { LibraryError } from "../errors.js";
-
-const BackupObject = Schema.Struct({ objectHash: Schema.String, contentBase64: Schema.String });
-const RemoteLibraryBackup = Schema.Struct({
-  version: Schema.Literal(1),
-  exportedAt: Schema.String,
-  headSnapshotId: Schema.NullOr(Schema.String),
-  snapshots: Schema.Array(Schema.Unknown),
-  objects: Schema.Array(BackupObject),
-});
+import { RemoteLibraryBackup } from "./backup.js";
 
 export interface RemoteSyncObject {
   readonly artifact: RemoteArtifact;
@@ -54,18 +45,13 @@ export interface RemoteExportResult {
   readonly objects: number;
 }
 
-function artifactIdentity(artifact: RemoteArtifact): {
-  readonly artifactId: string;
-  readonly artifactType: RemoteArtifact["artifactType"];
-  readonly objectHash: string;
-  readonly revisionHash: string | null;
-} {
+function artifactIdentity(artifact: RemoteArtifact) {
   return {
     artifactId: artifact.artifactId,
     artifactType: artifact.artifactType,
     objectHash: artifact.objectHash,
     revisionHash: artifact.revisionHash,
-  };
+  } as const;
 }
 
 function sameArtifacts(head: RemoteSnapshot, artifacts: ReadonlyArray<RemoteArtifact>): boolean {

@@ -16,14 +16,8 @@ import { skill_invocations } from "@selftune/local-store/schema";
 import {
   DuckDbAnalyticalBatch,
   DuckDbAnalyticalStore,
-  DuckDbTraceInstrumentationScope,
   DuckDbHistoricalLogSkillLink,
-  DuckDbHistoricalMetricPoint,
-  DuckDbTraceLogRecord,
-  DuckDbTraceResource,
-  DuckDbTraceSpanLink,
   DuckDbTraceSkillLink,
-  DuckDbTraceSpan,
 } from "@selftune/observability/duckdb-store";
 import {
   LocalSkillFailureSignal,
@@ -221,56 +215,29 @@ const resolveBatch = Effect.fn("LocalTraceImporter.resolveBatch")(function* (
       );
     }
   }
-  return {
-    analyticalBatch: DuckDbAnalyticalBatch.make({
-      schema_version: "1.0.0",
-      batch_id: request.batch.batch_id,
-      source_revision: request.source_revision,
-      normalizer_version: request.normalizer_version,
-      spans: request.batch.spans.map((span) => DuckDbTraceSpan.make(span)),
-      links,
-      ...(request.batch.resources
-        ? {
-            resources: request.batch.resources.map((resource) =>
-              DuckDbTraceResource.make(resource),
-            ),
-          }
-        : {}),
-      ...(request.batch.instrumentation_scopes
-        ? {
-            instrumentation_scopes: request.batch.instrumentation_scopes.map((scope) =>
-              DuckDbTraceInstrumentationScope.make(scope),
-            ),
-          }
-        : {}),
-      ...(request.batch.logs
-        ? {
-            logs: request.batch.logs.map((log) => DuckDbTraceLogRecord.make(log)),
-          }
-        : {}),
-      ...(request.batch.metric_points
-        ? {
-            metric_points: request.batch.metric_points.map((point) =>
-              DuckDbHistoricalMetricPoint.make(point),
-            ),
-          }
-        : {}),
-      ...(request.batch.log_skill_links
-        ? {
-            log_skill_links: logSkillLinks,
-          }
-        : {}),
-      ...(request.batch.span_links
-        ? {
-            span_links: request.batch.span_links.map((link) => DuckDbTraceSpanLink.make(link)),
-          }
-        : {}),
-    }),
-    skillFailureSignals,
+  const { log_skill_links: sourceLogLinks, ...sourceBatch } = request.batch;
+  const analyticalInput = {
+    ...sourceBatch,
+    source_revision: request.source_revision,
+    normalizer_version: request.normalizer_version,
+    links,
   };
+  const analyticalBatch = yield* Schema.decodeEffect(DuckDbAnalyticalBatch)(
+    sourceLogLinks === undefined
+      ? analyticalInput
+      : { ...analyticalInput, log_skill_links: logSkillLinks },
+  ).pipe(
+    Effect.mapError((error) =>
+      LocalTraceImportFailure.make({
+        operation: "prepare local analytical batch",
+        message: error.message,
+      }),
+    ),
+  );
+  return { analyticalBatch, skillFailureSignals };
 });
 
-const decodeRequest = (input: unknown) =>
+const decodeRequest = (input: LocalTraceImportRequest) =>
   Schema.decodeUnknownEffect(LocalTraceImportRequest)(input).pipe(
     Effect.catchTag("SchemaError", (error) =>
       Effect.fail(
@@ -291,7 +258,9 @@ export const makeLocalTraceImporterLive = (database: Database) =>
     LocalTraceImporter,
     Effect.gen(function* () {
       const store = yield* DuckDbAnalyticalStore;
-      const importTrace = Effect.fn("LocalTraceImporter.importTrace")(function* (input: unknown) {
+      const importTrace = Effect.fn("LocalTraceImporter.importTrace")(function* (
+        input: LocalTraceImportRequest,
+      ) {
         const request = yield* decodeRequest(input);
         const resolved = yield* resolveBatch(database, request);
         const checkpoint = AnalyticalImportCheckpoint.make({

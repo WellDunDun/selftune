@@ -63,14 +63,16 @@ export function operationError(operation: string, cause: unknown): DashboardOper
     });
   }
   if (cause instanceof CloudTeamCollaborationError) {
-    return DashboardOperationError.make({
+    const failure = {
       operation,
       code: cause.code,
       message: cause.message,
       status: cause.status,
-      ...(cause.suggestion ? { suggestion: cause.suggestion } : {}),
       retryable: cause.retryable,
-    });
+    };
+    if (cause.suggestion)
+      return DashboardOperationError.make({ ...failure, suggestion: cause.suggestion });
+    return DashboardOperationError.make(failure);
   }
   if (cause instanceof CatalogSkillSetResolutionError) {
     return DashboardOperationError.make({
@@ -118,14 +120,16 @@ export function operationError(operation: string, cause: unknown): DashboardOper
     });
   }
   if (cause instanceof CLIError || cause instanceof LibraryError) {
-    return DashboardOperationError.make({
+    const failure = {
       operation,
       code: cause.code,
       message: cause.message,
       status: cause.code === "FILE_NOT_FOUND" ? 404 : cause.code === "GUARD_BLOCKED" ? 409 : 400,
-      ...(cause.suggestion ? { suggestion: cause.suggestion } : {}),
       retryable: cause.retryable,
-    });
+    };
+    if (cause.suggestion)
+      return DashboardOperationError.make({ ...failure, suggestion: cause.suggestion });
+    return DashboardOperationError.make(failure);
   }
   return DashboardOperationError.make({
     operation,

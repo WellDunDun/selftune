@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { basename, resolve } from "node:path";
+import { Option, Schema } from "effect";
 
 import { computeSkillVersionHash } from "../utils/skill-discovery.js";
 import { getSkillEditCaptureLogPath } from "../constants.js";
@@ -155,10 +156,32 @@ function nearby(left: number | null, right: number | null, windowMs: number): bo
   return left !== null && right !== null && right >= left && right - left <= windowMs;
 }
 
-type SignalCursor = {
-  readonly prompt_at: string;
-  readonly prompt_id: string;
-};
+const SignalCursor = Schema.Struct({
+  prompt_at: Schema.String,
+  prompt_id: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(256)),
+});
+type SignalCursor = typeof SignalCursor.Type;
+const decodeSignalCursor = Schema.decodeUnknownSync(Schema.fromJsonString(SignalCursor));
+const decodeRawReference = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Struct({ path: Schema.String.check(Schema.isNonEmpty()) })),
+);
+const JsonObject = Schema.Record(Schema.String, Schema.Json);
+const isJsonObject = Schema.is(JsonObject);
+const isText = Schema.is(Schema.String);
+const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
+const RevisionHash = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
+const decodeCapturedRevision = Schema.decodeUnknownOption(
+  Schema.Struct({
+    event_type: Schema.Literal("skill_md_edit_capture"),
+    status: Schema.Literal("captured"),
+    session_id: Schema.String,
+    target_digest: Schema.String,
+    pre_revision: RevisionHash,
+    post_revision: RevisionHash,
+    pre_captured_at: Schema.String,
+    post_captured_at: Schema.String,
+  }),
+);
 
 export class CorrectionSignalCursorError extends Error {
   constructor() {
@@ -180,18 +203,8 @@ function decodeCursor(cursor: string | null | undefined): SignalCursor | null {
   if (cursor === null || cursor === undefined) return null;
   if (!/^[A-Za-z0-9_-]{1,1024}$/.test(cursor)) throw new CorrectionSignalCursorError();
   try {
-    const decoded: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
-    if (
-      typeof decoded !== "object" ||
-      decoded === null ||
-      !("prompt_at" in decoded) ||
-      !("prompt_id" in decoded) ||
-      typeof decoded.prompt_at !== "string" ||
-      typeof decoded.prompt_id !== "string" ||
-      !Number.isFinite(Date.parse(decoded.prompt_at)) ||
-      decoded.prompt_id.length === 0 ||
-      decoded.prompt_id.length > 256
-    ) {
+    const decoded = decodeSignalCursor(Buffer.from(cursor, "base64url").toString("utf8"));
+    if (!Number.isFinite(Date.parse(decoded.prompt_at))) {
       throw new CorrectionSignalCursorError();
     }
     return {
@@ -220,16 +233,7 @@ function defaultInspectSkill(skillPath: string) {
 
 function rawPath(rawSourceRef: string): string | null {
   try {
-    const value: unknown = JSON.parse(rawSourceRef);
-    if (
-      typeof value === "object" &&
-      value !== null &&
-      "path" in value &&
-      typeof value.path === "string" &&
-      value.path.length > 0
-    ) {
-      return value.path;
-    }
+    return decodeRawReference(rawSourceRef).path;
   } catch {
     // Legacy source references may be opaque strings; they are not reopenable.
   }
@@ -248,14 +252,14 @@ function defaultReadRawSource(rawSourceRef: string): string | null {
   }
 }
 
-function parsedValues(raw: string): readonly unknown[] {
-  const parsed: unknown[] = [];
+function parsedValues(raw: string): readonly (typeof Schema.Json.Type)[] {
+  const parsed: (typeof Schema.Json.Type)[] = [];
   try {
-    parsed.push(JSON.parse(raw));
+    parsed.push(decodeJson(raw));
   } catch {
     for (const line of raw.split("\n")) {
       try {
-        parsed.push(JSON.parse(line));
+        parsed.push(decodeJson(line));
       } catch {
         // Source-native formats may have non-JSON framing. Those lines carry no deterministic edit.
       }
@@ -264,15 +268,15 @@ function parsedValues(raw: string): readonly unknown[] {
   return parsed;
 }
 
-function objects(value: unknown, depth = 0): readonly Record<string, unknown>[] {
-  if (depth > 12 || typeof value !== "object" || value === null) return [];
+function objects(value: typeof Schema.Json.Type, depth = 0): readonly (typeof JsonObject.Type)[] {
+  if (depth > 12) return [];
   if (Array.isArray(value)) return value.flatMap((item) => objects(item, depth + 1));
-  const object = value as Record<string, unknown>;
-  return [object, ...Object.values(object).flatMap((item) => objects(item, depth + 1))];
+  if (!isJsonObject(value)) return [];
+  return [value, ...Object.values(value).flatMap((item) => objects(item, depth + 1))];
 }
 
-function exactPath(value: unknown, skillPath: string): boolean {
-  return typeof value === "string" && resolve(value) === resolve(skillPath);
+function exactPath(value: typeof Schema.Json.Type | undefined, skillPath: string): boolean {
+  return isText(value) && resolve(value) === resolve(skillPath);
 }
 
 type RawEditEvidence = {
@@ -292,7 +296,7 @@ function rawEditEvidence(raw: string | null, skillPath: string): RawEditEvidence
       if (!exactPath(path, skillPath)) continue;
       const before = object.before ?? object.old_string ?? object.previous_content;
       const after = object.after ?? object.new_string ?? object.updated_content;
-      if (typeof before === "string" && typeof after === "string") {
+      if (isText(before) && isText(after)) {
         return {
           kind: "raw_exact_contents",
           digest: digest(JSON.stringify({ skill_path: resolve(skillPath), before, after })),
@@ -302,7 +306,7 @@ function rawEditEvidence(raw: string | null, skillPath: string): RawEditEvidence
           post_revision: null,
         };
       }
-      if (typeof object.patch === "string" && object.patch.length > 0) {
+      if (isText(object.patch) && object.patch.length > 0) {
         return {
           kind: "raw_deterministic_patch",
           digest: digest(JSON.stringify({ skill_path: resolve(skillPath), patch: object.patch })),
@@ -342,32 +346,16 @@ function capturedRevisionEvidence(
   if (promptTimestamp === null) return null;
   const targetDigest = digest(resolve(skillPath));
   const candidates: Array<RawEditEvidence & { readonly post_timestamp: number }> = [];
-  for (const value of parsedValues(raw)) {
+  for (const rawValue of parsedValues(raw)) {
+    const decoded = decodeCapturedRevision(rawValue);
+    if (Option.isNone(decoded)) continue;
+    const value = decoded.value;
     if (
-      typeof value !== "object" ||
-      value === null ||
-      !("event_type" in value) ||
-      value.event_type !== "skill_md_edit_capture" ||
-      !("status" in value) ||
-      value.status !== "captured" ||
-      !("session_id" in value) ||
       value.session_id !== sessionId ||
-      !("target_digest" in value) ||
       value.target_digest !== targetDigest ||
-      !("pre_revision" in value) ||
-      !("post_revision" in value) ||
-      typeof value.pre_revision !== "string" ||
-      typeof value.post_revision !== "string" ||
-      !/^[a-f0-9]{64}$/.test(value.pre_revision) ||
-      !/^[a-f0-9]{64}$/.test(value.post_revision) ||
-      value.pre_revision === value.post_revision ||
-      !("pre_captured_at" in value) ||
-      typeof value.pre_captured_at !== "string" ||
-      !("post_captured_at" in value) ||
-      typeof value.post_captured_at !== "string"
-    ) {
+      value.pre_revision === value.post_revision
+    )
       continue;
-    }
     const preTimestamp = parseTimestamp(value.pre_captured_at);
     const postTimestamp = parseTimestamp(value.post_captured_at);
     if (
@@ -381,7 +369,7 @@ function capturedRevisionEvidence(
     }
     candidates.push({
       kind: "captured_package_revisions",
-      digest: digest(JSON.stringify(value)),
+      digest: digest(JSON.stringify(rawValue)),
       pre_content_digest: null,
       post_content_digest: null,
       pre_revision: value.pre_revision,

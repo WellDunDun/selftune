@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -7,14 +8,15 @@ import type {
   HarnessRuntimeContribution,
 } from "@selftune/harness-core/descriptor";
 import { svgHarnessIcon } from "@selftune/harness-core/descriptor";
-import { missingClaudeCodeHookKeys } from "@selftune/runtime/utils/hooks";
+import { ClaudeCodeSettings, missingClaudeCodeHookKeys } from "@selftune/runtime/utils/hooks";
 
-function readHooks(path: string): Record<string, unknown> | null {
+function readHooks(path: string): NonNullable<ClaudeCodeSettings["hooks"]> | null {
   try {
-    const value: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-    const hooks = Reflect.get(value, "hooks");
-    return typeof hooks === "object" && hooks !== null && !Array.isArray(hooks) ? hooks : null;
+    return (
+      Schema.decodeUnknownSync(Schema.fromJsonString(ClaudeCodeSettings))(
+        readFileSync(path, "utf8"),
+      ).hooks ?? null
+    );
   } catch {
     return null;
   }

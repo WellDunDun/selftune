@@ -148,7 +148,11 @@ test("imports authenticated loopback OTLP trace and log exports through the shar
   });
   expect(existsSync(paths.localAnalyticsPath)).toBe(true);
   const origin = `http://127.0.0.1:${server.port}`;
-  const request = (path: string, payload: object, token = AUTH_TOKEN) =>
+  const request = (
+    path: string,
+    payload: ReturnType<typeof otlpTrace> | ReturnType<typeof otlpLog>,
+    token = AUTH_TOKEN,
+  ) =>
     fetch(`${origin}${path}`, {
       method: "POST",
       headers: {

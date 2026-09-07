@@ -1,5 +1,6 @@
 import { chmodSync, existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import * as Schema from "effect/Schema";
 
 import { CONTRIBUTION_PUBLIC_RELAY_ENDPOINT } from "./constants.js";
 import type { CreatorContributionConfig } from "./contribution-config.js";
@@ -310,11 +311,16 @@ export function removePortableFeedbackArtifacts(skillPath: string): string[] {
     let looksGenerated = content.includes("portable-feedback/1");
     if (filename === PORTABLE_FEEDBACK_MANIFEST_FILENAME) {
       try {
-        const parsed = JSON.parse(content) as Partial<PortableFeedbackManifest>;
-        looksGenerated =
-          parsed.version === 1 &&
-          parsed.helper === `./${PORTABLE_FEEDBACK_HELPER_FILENAME}` &&
-          parsed.consent?.mode === "first_run";
+        Schema.decodeUnknownSync(
+          Schema.fromJsonString(
+            Schema.Struct({
+              version: Schema.Literal(1),
+              helper: Schema.Literal(`./${PORTABLE_FEEDBACK_HELPER_FILENAME}`),
+              consent: Schema.Struct({ mode: Schema.Literal("first_run") }),
+            }),
+          ),
+        )(content);
+        looksGenerated = true;
       } catch {
         looksGenerated = false;
       }

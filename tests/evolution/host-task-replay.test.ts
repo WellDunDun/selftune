@@ -13,6 +13,44 @@ const closedStream = () =>
   });
 
 describe("collectCodexTaskReplayProcess", () => {
+  test("retains valid neighboring message blocks and usage through malformed events", () => {
+    const parsed = parseCodexTaskReplayOutput(
+      [
+        "null",
+        "[]",
+        "{broken",
+        '{"type":"thread.started","thread_id":"thread-valid"}',
+        '{"type":"response_item","payload":{"type":"message","role":"user","content":[{"text":"not an assistant response"}]}}',
+        '{"type":"response_item","payload":{"type":"message","role":"assistant","content":[null,42,{"text":{}},{"text":" valid response "}]}}',
+        '{"type":"turn.completed","usage":{"input_tokens":120,"output_tokens":45}}',
+        '{"type":"turn.completed","usage":{"input_tokens":"9000","output_tokens":0},"thread_id":{}}',
+        '{"type":"turn.completed","usage":{"input_tokens":-1,"output_tokens":1.5}}',
+      ].join("\n"),
+    );
+    expect(parsed).toEqual({
+      output: "valid response",
+      sessionId: "thread-valid",
+      inputTokens: 120,
+      outputTokens: 0,
+      runtimeError: null,
+    });
+  });
+
+  test("preserves string and structured runtime errors without accepting malformed messages", () => {
+    expect(parseCodexTaskReplayOutput('{"error":"failed to start"}').runtimeError).toBe(
+      "failed to start",
+    );
+    expect(
+      parseCodexTaskReplayOutput(
+        [
+          '{"type":"turn.failed","error":{"message":"quota exhausted"}}',
+          '{"type":"turn.failed","error":{"message":42}}',
+          '{"type":"item.completed","item":{"type":"agent_message","text":{},"content":"invalid"}}',
+        ].join("\n"),
+      ),
+    ).toMatchObject({ runtimeError: "quota exhausted", output: "" });
+  });
+
   test("times out when an exited Codex process leaves inherited streams open", async () => {
     const signals: number[] = [];
 

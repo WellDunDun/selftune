@@ -105,6 +105,16 @@ describe("checkActiveMonitoring", () => {
 // ---------------------------------------------------------------------------
 
 describe("hasRecentWatchSnapshot", () => {
+  test("a numeric timestamp cannot count as a recent watch snapshot", () => {
+    const snapshotDir = join(tmpDir, "monitoring");
+    mkdirSync(snapshotDir, { recursive: true });
+    writeFileSync(
+      join(snapshotDir, "latest-snapshot.json"),
+      JSON.stringify({ timestamp: Date.now(), skill_name: "pdf" }),
+    );
+    expect(hasRecentWatchSnapshot("pdf", tmpDir, 24)).toBe(false);
+  });
+
   test("returns false when no snapshot directory exists", () => {
     const result = hasRecentWatchSnapshot("pdf", join(tmpDir, "nonexistent"), 24);
     expect(result).toBe(false);

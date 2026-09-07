@@ -26,20 +26,19 @@ export class RegistryPathConfinementError extends Schema.TaggedErrorClass<Regist
 
 function invalidIdentifier(
   identifierType: "skill-name" | "version",
-  value: unknown,
+  value: string,
   expected: string,
 ): RegistryIdentifierValidationError {
-  const printableValue = typeof value === "string" ? value : JSON.stringify(value);
   return RegistryIdentifierValidationError.make({
     identifierType,
-    value: printableValue ?? String(value),
-    message: `Invalid registry ${identifierType} '${printableValue ?? String(value)}': expected ${expected}`,
+    value,
+    message: `Invalid registry ${identifierType} '${value}': expected ${expected}`,
   });
 }
 
 function validateIdentifier(
   identifierType: "skill-name" | "version",
-  value: unknown,
+  value: string,
   pattern: RegExp,
 ): string {
   const expected =
@@ -48,7 +47,6 @@ function validateIdentifier(
       : "a 1-128 character version containing only letters, numbers, dots, plus signs, underscores, and hyphens";
 
   if (
-    typeof value !== "string" ||
     value.length === 0 ||
     value.length > MAX_IDENTIFIER_LENGTH ||
     value !== value.trim() ||
@@ -60,11 +58,11 @@ function validateIdentifier(
   return value;
 }
 
-export function validateRegistrySkillName(value: unknown): string {
+export function validateRegistrySkillName(value: string): string {
   return validateIdentifier("skill-name", value, SKILL_NAME_PATTERN);
 }
 
-export function validateRegistryVersion(value: unknown): string {
+export function validateRegistryVersion(value: string): string {
   return validateIdentifier("version", value, VERSION_PATTERN);
 }
 

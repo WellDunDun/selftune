@@ -1,6 +1,7 @@
 // oxlint-disable max-lines -- The local HTTP application keeps route ordering and shared guards in one auditable boundary.
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import type { Mutable } from "effect/Types";
 import {
   SkillSetDependencyResolutionInput,
   SkillSetDependencyResolution,
@@ -18,6 +19,7 @@ import type {
   CreateRemoteLibraryShareRequest,
   CreateSkillSetRequest,
   DeriveSkillSetRequest,
+  DesktopBillingCheckoutRequest,
   DraftInsightRequest,
   ExportSkillSetRequest,
   PlanSkillSetRequest,
@@ -49,6 +51,7 @@ import {
   dashboardCorsHeaders,
   dashboardOperationErrorResponse,
   sameOriginFailure,
+  withDashboardCors,
 } from "../dashboard-http.js";
 import { routeWorkspaceSettings } from "./workspace-settings.js";
 import { routeLibraryTransfer } from "./library-transfer.js";
@@ -282,6 +285,8 @@ const PortfolioQuarantineBatchBody = Schema.Struct({
     Schema.Struct({
       skill_name: Schema.String,
       skill_path: Schema.String,
+      keep_searchable: Schema.optionalKey(Schema.Boolean),
+      expected_content_hash: Schema.optionalKey(Schema.String),
     }),
   ),
 });
@@ -322,10 +327,10 @@ const decodeBody = Effect.fn("DashboardApplication.decodeBody")(function* <S ext
   message: string,
 ) {
   const input = yield* Effect.tryPromise({
-    try: (): Promise<unknown> => request.json(),
+    try: () => request.text(),
     catch: () => requestError(operation, code, message),
   });
-  return yield* Schema.decodeUnknownEffect(schema)(input).pipe(
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(input).pipe(
     Effect.mapError(() => requestError(operation, code, message)),
   );
 });
@@ -349,9 +354,6 @@ function decodeRouteSegment(
       requireNonBlank(operation, decoded, "INVALID_FLAG", "The collaboration ID is required."),
     ),
   );
-}
-function json(value: unknown, status = 200): Response {
-  return Response.json(value, { status, headers: dashboardCorsHeaders() });
 }
 function readOnlySkillSetsResponse(): Response {
   return Response.json(
@@ -382,7 +384,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
     Effect.sync(() => context.onResourcesChanged?.(resources));
 
   if (url.pathname === "/api/v2/portfolio" && request.method === "GET") {
-    return json(yield* operations.portfolio);
+    return Response.json(yield* operations.portfolio);
   }
 
   if (url.pathname === "/api/v2/portfolio/quarantine" && request.method === "POST") {
@@ -407,7 +409,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       confirm: body.confirm === true,
     });
     if (body.confirm === true) yield* resourcesChanged(libraryLocationWriteResources);
-    return json(receipt);
+    return Response.json(receipt);
   }
 
   if (url.pathname === "/api/v2/portfolio/quarantine-batch" && request.method === "POST") {
@@ -433,10 +435,12 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       body.skills.map((skill) => ({
         skillName: skill.skill_name,
         skillPath: skill.skill_path,
+        keepSearchable: skill.keep_searchable,
+        expectedContentHash: skill.expected_content_hash,
       })),
     );
     yield* resourcesChanged(libraryLocationWriteResources);
-    return json(result);
+    return Response.json(result);
   }
 
   if (url.pathname === "/api/v2/portfolio/restore" && request.method === "POST") {
@@ -451,7 +455,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
     );
     const receipt = yield* operations.restore(body.quarantine_id);
     yield* resourcesChanged(libraryLocationWriteResources);
-    return json(receipt);
+    return Response.json(receipt);
   }
   const libraryTransfer = yield* routeLibraryTransfer(
     request,
@@ -464,7 +468,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
     return libraryTransfer.response;
   }
   if (url.pathname === "/api/v2/decisions" && request.method === "GET") {
-    return json({ decisions: yield* operations.decisions });
+    return Response.json({ decisions: yield* operations.decisions });
   }
   if (url.pathname === "/api/v2/decisions/removals" && request.method === "POST") {
     const unauthorized = mutationFailure(request, context);
@@ -484,7 +488,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       })),
     });
     yield* resourcesChanged(durableDecisionResources.prepare);
-    return json(decision);
+    return Response.json(decision);
   }
   if (url.pathname === "/api/v2/decisions/consolidations" && request.method === "POST") {
     const unauthorized = mutationFailure(request, context);
@@ -502,7 +506,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       targetSkillPaths: body.target_skill_paths,
     });
     yield* resourcesChanged(durableDecisionResources.prepare);
-    return json(decision);
+    return Response.json(decision);
   }
   if (url.pathname === "/api/v2/decisions/skill-set-conflicts" && request.method === "POST") {
     const unauthorized = mutationFailure(request, context);
@@ -519,7 +523,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       project_root: body.project_root,
     });
     yield* resourcesChanged(durableDecisionResources.prepare);
-    return json(decision);
+    return Response.json(decision);
   }
   const durableDecisionReadMatch = url.pathname.match(/^\/api\/v2\/decisions\/([0-9a-f-]{36})$/i);
   const durableDecisionArtifactMatch = url.pathname.match(
@@ -537,14 +541,14 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       );
     }
     const review = adaptLocalSourceMerge(decision);
-    return json(
+    return Response.json(
       durableDecisionArtifactMatch[2] === "run-package"
         ? buildRunPackage(review)
         : summarizeRunReview(review),
     );
   }
   if (durableDecisionReadMatch && request.method === "GET") {
-    return json(yield* operations.decision(durableDecisionReadMatch[1]!));
+    return Response.json(yield* operations.decision(durableDecisionReadMatch[1]!));
   }
   const durableDecisionActionMatch = url.pathname.match(
     /^\/api\/v2\/decisions\/([0-9a-f-]{36})\/(approve|decline|rollback)$/i,
@@ -568,11 +572,11 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
           ? durableDecisionResources.approve
           : durableDecisionResources.decide,
     );
-    return json(decision);
+    return Response.json(decision);
   }
 
   if (url.pathname === "/api/v2/skill-intelligence" && request.method === "GET") {
-    return json(yield* operations.skillIntelligence);
+    return Response.json(yield* operations.skillIntelligence);
   }
 
   if (url.pathname === "/api/v2/skill-intelligence/classification" && request.method === "POST") {
@@ -586,7 +590,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "A skill, inferred category, and valid category or null are required.",
     );
     const input: UpdateSkillClassificationRequest = { ...body };
-    return json(yield* operations.updateSkillClassification(input));
+    return Response.json(yield* operations.updateSkillClassification(input));
   }
 
   if (
@@ -628,7 +632,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
           }
         : undefined,
     };
-    return json(yield* operations.reviewSkillSetSuggestion(input));
+    return Response.json(yield* operations.reviewSkillSetSuggestion(input));
   }
 
   if (url.pathname.startsWith("/api/v2/library/source-update/") && request.method === "POST") {
@@ -648,7 +652,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
         "MISSING_FLAG",
         "skill_name is required.",
       );
-      return json(yield* operations.previewSourceUpdate(body.skill_name));
+      return Response.json(yield* operations.previewSourceUpdate(body.skill_name));
     }
     if (url.pathname === "/api/v2/library/source-update/apply") {
       const body = yield* decodeBody(
@@ -660,7 +664,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       );
       const receipt = yield* operations.applySourceUpdate(body.skill_name, body.strategy);
       yield* resourcesChanged(sourceUpdateResources.apply);
-      return json(receipt);
+      return Response.json(receipt);
     }
     if (url.pathname === "/api/v2/library/source-update/merge/prepare") {
       const body = yield* decodeBody(
@@ -676,7 +680,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
         body.model ?? null,
       );
       yield* resourcesChanged(sourceMergeDecisionResources.prepare);
-      return json(preview);
+      return Response.json(preview);
     }
     return new Response("Not found", {
       status: 404,
@@ -685,7 +689,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
   }
 
   if (url.pathname === "/api/v2/insights" && request.method === "GET") {
-    return json(yield* operations.insights);
+    return Response.json(yield* operations.insights);
   }
 
   if (url.pathname.startsWith("/api/v2/insights/") && request.method === "POST") {
@@ -715,7 +719,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       };
       const candidate = yield* operations.reviewInsight(input);
       yield* resourcesChanged(insightDecisionResources.review);
-      return json(candidate);
+      return Response.json(candidate);
     }
     if (url.pathname === "/api/v2/insights/draft") {
       const body = yield* decodeBody(
@@ -731,7 +735,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       };
       const draft = yield* operations.draftInsight(input);
       yield* resourcesChanged(insightDecisionResources.draft);
-      return json(draft);
+      return Response.json(draft);
     }
     if (url.pathname === "/api/v2/insights/evaluate") {
       const body = yield* decodeBody(
@@ -743,7 +747,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       );
       const gate = yield* operations.evaluateInsight(body.candidate_id);
       yield* resourcesChanged(insightDecisionResources.evaluate);
-      return json(gate);
+      return Response.json(gate);
     }
     if (url.pathname === "/api/v2/insights/release") {
       const body = yield* decodeBody(
@@ -755,7 +759,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       );
       const release = yield* operations.releaseInsight(body.candidate_id);
       yield* resourcesChanged(insightDecisionResources.release);
-      return json(release);
+      return Response.json(release);
     }
     return new Response("Not found", {
       status: 404,
@@ -764,17 +768,17 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
   }
 
   if (url.pathname === "/api/v2/skill-sets" && request.method === "GET") {
-    return json(yield* operations.skillSets);
+    return Response.json(yield* operations.skillSets);
   }
 
   if (url.pathname === "/api/v2/skill-sets/assignments" && request.method === "GET") {
-    return json(yield* operations.assignedSkillSets);
+    return Response.json(yield* operations.assignedSkillSets);
   }
 
   if (url.pathname === "/api/v2/skill-sets/assignments/sync" && request.method === "POST") {
     const unauthorized = mutationFailure(request, context);
     if (unauthorized) return unauthorized;
-    return json(yield* operations.assignedSkillSets);
+    return Response.json(yield* operations.assignedSkillSets);
   }
 
   if (url.pathname === "/api/v2/skill-sets/assignments/preview" && request.method === "POST") {
@@ -787,14 +791,13 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "MISSING_FLAG",
       "assignment_id is required.",
     );
-    return json(
-      yield* operations.previewAssignedSkillSet({
-        assignmentId: body.assignment_id,
-        ...(body.scope ? { scope: body.scope } : {}),
-        ...(body.project_root ? { projectRoot: body.project_root } : {}),
-        ...(body.target_agents ? { targetAgents: body.target_agents } : {}),
-      }),
-    );
+    const input: Mutable<Parameters<typeof operations.previewAssignedSkillSet>[0]> = {
+      assignmentId: body.assignment_id,
+    };
+    if (body.scope) input.scope = body.scope;
+    if (body.project_root) input.projectRoot = body.project_root;
+    if (body.target_agents) input.targetAgents = body.target_agents;
+    return Response.json(yield* operations.previewAssignedSkillSet(input));
   }
 
   if (url.pathname === "/api/v2/skill-sets/assignments/install" && request.method === "POST") {
@@ -807,7 +810,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "MISSING_FLAG",
       "Reviewed assignment hashes and explicit install confirmation are required.",
     );
-    return json(
+    return Response.json(
       yield* operations.installAssignedSkillSet({
         assignmentId: body.assignment_id,
         requestId: body.request_id,
@@ -829,7 +832,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "MISSING_FLAG",
       "assignment_id, receipt_id, and explicit Undo confirmation are required.",
     );
-    return json(
+    return Response.json(
       yield* operations.rollbackAssignedSkillSet({
         assignmentId: body.assignment_id,
         receiptId: body.receipt_id,
@@ -848,14 +851,13 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "MISSING_FLAG",
       "assignment_id, title, and message are required.",
     );
-    return json(
-      yield* operations.previewTeamContribution({
-        assignmentId: body.assignment_id,
-        title: body.title,
-        message: body.message,
-        ...(body.source_receipt_ids ? { sourceReceiptIds: body.source_receipt_ids } : {}),
-      }),
-    );
+    const input: Mutable<Parameters<typeof operations.previewTeamContribution>[0]> = {
+      assignmentId: body.assignment_id,
+      title: body.title,
+      message: body.message,
+    };
+    if (body.source_receipt_ids) input.sourceReceiptIds = body.source_receipt_ids;
+    return Response.json(yield* operations.previewTeamContribution(input));
   }
 
   if (url.pathname === "/api/v2/skill-sets/contributions/submit" && request.method === "POST") {
@@ -868,7 +870,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "MISSING_FLAG",
       "A preview token and explicit confirmation are required.",
     );
-    return json(
+    return Response.json(
       yield* operations.submitTeamContribution({
         previewToken: body.preview_token,
         confirmSubmit: body.confirm_submit,
@@ -879,11 +881,11 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
   if (url.pathname === "/api/v2/skill-sets/contributions/sync" && request.method === "POST") {
     const unauthorized = mutationFailure(request, context);
     if (unauthorized) return unauthorized;
-    return json(yield* operations.syncTeamContributions);
+    return Response.json(yield* operations.syncTeamContributions);
   }
 
   if (url.pathname === "/api/v2/plugins" && request.method === "GET") {
-    return json(yield* operations.plugins);
+    return Response.json(yield* operations.plugins);
   }
 
   if (url.pathname === "/api/v2/plugins/manage" && request.method === "POST") {
@@ -902,7 +904,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "MISSING_FLAG",
       "plugin_id is required.",
     );
-    return json(
+    return Response.json(
       yield* operations.managePlugin({
         host: body.host,
         pluginId: body.plugin_id,
@@ -912,7 +914,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
   }
 
   if (url.pathname === "/api/v2/skill-sets/packs" && request.method === "GET") {
-    return json(yield* operations.listSkillSetPacks());
+    return Response.json(yield* operations.listSkillSetPacks());
   }
 
   const skillSetMatch = /^\/api\/v2\/skill-sets\/([^/]+)$/.exec(url.pathname);
@@ -923,14 +925,14 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
     const result = yield* operations.deleteSkillSet(decodeURIComponent(skillSetMatch[1] ?? ""));
     yield* resourcesChanged(projectSkillSetResources.remove);
     context.onSkillSetChanged?.();
-    return json(result);
+    return Response.json(result);
   }
 
   const skillSetPackMatch = /^\/api\/v2\/skill-sets\/packs\/([^/]+)$/.exec(url.pathname);
   if (skillSetPackMatch && request.method === "DELETE") {
     const unauthorized = mutationFailure(request, context);
     if (unauthorized) return unauthorized;
-    return json(
+    return Response.json(
       yield* operations.revokeSkillSetPack(decodeURIComponent(skillSetPackMatch[1] ?? "")),
     );
   }
@@ -945,7 +947,9 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "MISSING_FLAG",
       "set_id is required.",
     );
-    return json(yield* operations.previewSkillSetPublish(body.set_id, body.dependency_resolution));
+    return Response.json(
+      yield* operations.previewSkillSetPublish(body.set_id, body.dependency_resolution),
+    );
   }
 
   if (url.pathname === "/api/v2/skill-sets/publish" && request.method === "POST") {
@@ -958,7 +962,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "MISSING_FLAG",
       "set_id, reviewed release hashes, and explicit publish confirmation are required.",
     );
-    return json(
+    return Response.json(
       yield* operations.publishSkillSet({
         setId: body.set_id,
         expectedSkillSetRevisionSha256: body.expected_skill_set_revision_sha256,
@@ -982,7 +986,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
         "MISSING_FLAG",
         "pack_url is required.",
       );
-      return json(yield* operations.previewSkillSetPack(body.pack_url));
+      return Response.json(yield* operations.previewSkillSetPack(body.pack_url));
     }
     if (url.pathname === "/api/v2/skill-sets/packs/import") {
       const body = yield* decodeBody(
@@ -998,7 +1002,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       });
       yield* resourcesChanged(projectSkillSetResources.create);
       context.onSkillSetChanged?.();
-      return json(result);
+      return Response.json(result);
     }
     if (url.pathname === "/api/v2/skill-sets") {
       const body = yield* decodeBody(
@@ -1017,7 +1021,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       const manifest = yield* operations.createSkillSet(input);
       yield* resourcesChanged(projectSkillSetResources.create);
       context.onSkillSetChanged?.();
-      return json(manifest);
+      return Response.json(manifest);
     }
     if (url.pathname === "/api/v2/skill-sets/update") {
       const body = yield* decodeBody(
@@ -1038,7 +1042,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       const manifest = yield* operations.updateSkillSet(input);
       yield* resourcesChanged(projectSkillSetResources.update);
       context.onSkillSetChanged?.();
-      return json(manifest);
+      return Response.json(manifest);
     }
     if (url.pathname === "/api/v2/skill-sets/derive") {
       const body = yield* decodeBody(
@@ -1057,7 +1061,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       const manifest = yield* operations.deriveSkillSet(input);
       yield* resourcesChanged(projectSkillSetResources.derive);
       context.onSkillSetChanged?.();
-      return json(manifest);
+      return Response.json(manifest);
     }
     if (url.pathname === "/api/v2/skill-sets/export") {
       const body = yield* decodeBody(
@@ -1070,7 +1074,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       const input: ExportSkillSetRequest = { ...body };
       const receipt = yield* operations.exportSkillSet(input);
       yield* resourcesChanged(projectSkillSetResources.export);
-      return json(receipt);
+      return Response.json(receipt);
     }
     if (url.pathname === "/api/v2/skill-sets/plugin-export") {
       const body = yield* decodeBody(
@@ -1080,7 +1084,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
         "MISSING_FLAG",
         "set_id and target are required.",
       );
-      return json(yield* operations.exportSkillSetPlugin(body));
+      return Response.json(yield* operations.exportSkillSetPlugin(body));
     }
     if (url.pathname === "/api/v2/skill-sets/plugin-install/preview") {
       const body = yield* decodeBody(
@@ -1090,7 +1094,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
         "MISSING_FLAG",
         "set_id is required.",
       );
-      return json(yield* operations.previewSkillSetPluginInstall(body.set_id));
+      return Response.json(yield* operations.previewSkillSetPluginInstall(body.set_id));
     }
     if (url.pathname === "/api/v2/skill-sets/plugin-install") {
       const body = yield* decodeBody(
@@ -1100,7 +1104,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
         "MISSING_FLAG",
         "set_id, expected_revision_hash, and hosts are required.",
       );
-      return json(
+      return Response.json(
         yield* operations.installSkillSetPlugin({
           setId: body.set_id,
           expectedRevisionHash: body.expected_revision_hash,
@@ -1119,7 +1123,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       const input: PlanSkillSetRequest = { ...body };
       const plan = yield* operations.planSkillSet(input);
       yield* resourcesChanged(projectSkillSetResources.plan);
-      return json(plan);
+      return Response.json(plan);
     }
     if (url.pathname === "/api/v2/skill-sets/project-plan") {
       const body = yield* decodeBody(
@@ -1129,7 +1133,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
         "MISSING_FLAG",
         "project_root and set_ids are required.",
       );
-      return json(
+      return Response.json(
         yield* operations.previewProjectProvision({
           project_root: body.project_root,
           set_ids: body.set_ids,
@@ -1152,7 +1156,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
         create_react_project: body.create_react_project === true,
       });
       yield* resourcesChanged(projectSkillSetResources.apply);
-      return json(result);
+      return Response.json(result);
     }
     if (url.pathname === "/api/v2/skill-sets/apply") {
       const body = yield* decodeBody(
@@ -1165,7 +1169,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       const input: ApplySkillSetRequest = { ...body };
       const receipt = yield* operations.applySkillSet(input);
       yield* resourcesChanged(projectSkillSetResources.apply);
-      return json(receipt);
+      return Response.json(receipt);
     }
     if (url.pathname === "/api/v2/skill-sets/rollback") {
       const body = yield* decodeBody(
@@ -1178,22 +1182,22 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       const input: RollbackSkillSetRequest = { ...body };
       const receipt = yield* operations.rollbackSkillSet(input);
       yield* resourcesChanged(projectSkillSetResources.rollback);
-      return json(receipt);
+      return Response.json(receipt);
     }
-    return json(
+    return Response.json(
       {
         error: { code: "NOT_FOUND", message: "Unknown Skill Set operation." },
       },
-      404,
+      { status: 404 },
     );
   }
   if (url.pathname === "/api/v2/settings" && request.method === "GET") {
-    return json(yield* operations.settings);
+    return Response.json(yield* operations.settings);
   }
   if (url.pathname === "/api/v2/settings/cloud-account/link/start" && request.method === "POST") {
     const unauthorized = mutationFailure(request, context);
     if (unauthorized) return unauthorized;
-    return json(yield* operations.startCloudAccountLink);
+    return Response.json(yield* operations.startCloudAccountLink);
   }
   if (
     url.pathname === "/api/v2/settings/cloud-account/link/complete" &&
@@ -1212,15 +1216,15 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       link_id: body.link_id,
       preferences: { ...body.preferences },
     };
-    return json(yield* operations.completeCloudAccountLink(input));
+    return Response.json(yield* operations.completeCloudAccountLink(input));
   }
   if (url.pathname === "/api/v2/settings/billing/status" && request.method === "GET") {
-    return json(yield* operations.cloudBilling("status"));
+    return Response.json(yield* operations.cloudBilling("status"));
   }
   if (url.pathname === "/api/v2/settings/billing/portal" && request.method === "POST") {
     const unauthorized = mutationFailure(request, context);
     if (unauthorized) return unauthorized;
-    return json(yield* operations.cloudBilling("portal"));
+    return Response.json(yield* operations.cloudBilling("portal"));
   }
   if (url.pathname === "/api/v2/settings/billing/checkout" && request.method === "POST") {
     const unauthorized = mutationFailure(request, context);
@@ -1232,12 +1236,9 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "MISSING_FLAG",
       "Choose a billing plan before checkout.",
     );
-    return json(
-      yield* operations.cloudBilling("checkout", {
-        plan: body.plan,
-        ...(body.seats === undefined ? {} : { seats: body.seats }),
-      }),
-    );
+    const input: Mutable<DesktopBillingCheckoutRequest> = { plan: body.plan };
+    if (body.seats !== undefined) input.seats = body.seats;
+    return Response.json(yield* operations.cloudBilling("checkout", input));
   }
   if (url.pathname === "/api/v2/settings/billing/checkout/finalize" && request.method === "POST") {
     const unauthorized = mutationFailure(request, context);
@@ -1249,7 +1250,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "MISSING_FLAG",
       "Checkout session details are required.",
     );
-    return json(
+    return Response.json(
       yield* operations.cloudBilling("finalize", {
         sessionId: body.session_id,
       }),
@@ -1257,10 +1258,10 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
   }
 
   if (url.pathname === "/api/v2/team-collaboration/access" && request.method === "GET") {
-    return json(yield* operations.teamCollaborationAccess);
+    return Response.json(yield* operations.teamCollaborationAccess);
   }
   if (url.pathname === "/api/v2/team-collaboration" && request.method === "GET") {
-    return json(yield* operations.teamCollaborationSnapshot);
+    return Response.json(yield* operations.teamCollaborationSnapshot);
   }
   const collaborationRolloutMatch = url.pathname.match(
     /^\/api\/v2\/team-collaboration\/registry\/([^/]+)\/rollout-policy$/,
@@ -1279,7 +1280,9 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "INVALID_FLAG",
       "Choose manual, notify, or automatic rollout.",
     );
-    return json(yield* operations.updateTeamCollaborationRolloutPolicy(entryId, body.policy));
+    return Response.json(
+      yield* operations.updateTeamCollaborationRolloutPolicy(entryId, body.policy),
+    );
   }
   const collaborationDecisionMatch = url.pathname.match(
     /^\/api\/v2\/team-collaboration\/contributions\/([^/]+)\/(adopt|reject|rollback)$/,
@@ -1293,7 +1296,9 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
     );
     const action = collaborationDecisionMatch[2];
     if (action === "adopt" || action === "reject" || action === "rollback") {
-      return json(yield* operations.decideTeamCollaborationContribution(contributionId, action));
+      return Response.json(
+        yield* operations.decideTeamCollaborationContribution(contributionId, action),
+      );
     }
   }
 
@@ -1307,11 +1312,11 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "OPERATION_FAILED",
       "Sync & Backup preview failed.",
     );
-    return json(yield* operations.previewRemoteLibrary(body.preferences));
+    return Response.json(yield* operations.previewRemoteLibrary(body.preferences));
   }
 
   if (url.pathname === "/api/v2/settings/remote-library/status" && request.method === "GET") {
-    return json(yield* operations.remoteLibrary("status"));
+    return Response.json(yield* operations.remoteLibrary("status"));
   }
   const workspaceResponse = yield* routeWorkspaceSettings(
     request,
@@ -1322,7 +1327,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
   if (workspaceResponse) return workspaceResponse;
 
   if (url.pathname === "/api/v2/settings/remote-library/shares" && request.method === "GET") {
-    return json(yield* operations.remoteLibraryShare("list"));
+    return Response.json(yield* operations.remoteLibraryShare("list"));
   }
 
   if (
@@ -1340,7 +1345,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
         "Private share details are required.",
       );
       const input: CreateRemoteLibraryShareRequest = { ...body };
-      return json(yield* operations.remoteLibraryShare("create", input));
+      return Response.json(yield* operations.remoteLibraryShare("create", input));
     }
     const match = url.pathname.match(
       /^\/api\/v2\/settings\/remote-library\/shares\/([^/]+)\/(accept|import|revoke)$/,
@@ -1358,21 +1363,21 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
               "Private share ID is malformed.",
             ),
         });
-        return json(
+        return Response.json(
           yield* operations.remoteLibraryShare(shareAction, {
             share_id: shareId,
           }),
         );
       }
     }
-    return json(
+    return Response.json(
       {
         error: {
           code: "NOT_FOUND",
           message: "Unknown private share action.",
         },
       },
-      404,
+      { status: 404 },
     );
   }
 
@@ -1382,7 +1387,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       const unauthorized = mutationFailure(request, context, "A same-origin request is required.");
       if (unauthorized) return unauthorized;
       const remoteAction: RemoteLibraryAction = action;
-      return json(yield* operations.remoteLibrary(remoteAction));
+      return Response.json(yield* operations.remoteLibrary(remoteAction));
     }
   }
 
@@ -1399,7 +1404,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
     const input: UpdateDesktopScheduleRequest = {
       jobs: body.jobs.map((job) => ({ ...job })),
     };
-    return json(yield* operations.updateSchedule(input));
+    return Response.json(yield* operations.updateSchedule(input));
   }
 
   if (url.pathname === "/api/v2/settings/remote-library" && request.method === "POST") {
@@ -1417,7 +1422,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       api_key: body.api_key,
       preferences: { ...body.preferences },
     };
-    return json(yield* operations.updateRemoteSettings(input));
+    return Response.json(yield* operations.updateRemoteSettings(input));
   }
 
   if (url.pathname === "/api/v2/settings/onboarding" && request.method === "POST") {
@@ -1435,7 +1440,7 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       hook_harnesses: [...body.hook_harnesses],
       features: { ...body.features },
     };
-    return json(yield* operations.applyOnboarding(input));
+    return Response.json(yield* operations.applyOnboarding(input));
   }
 
   return null;
@@ -1448,5 +1453,6 @@ export function handleDashboardApplicationRoute(
 ) {
   return routeApplicationRequest(request, url, context).pipe(
     Effect.catch((error) => Effect.succeed(dashboardOperationErrorResponse(error))),
+    Effect.map((response) => (response ? withDashboardCors(response) : null)),
   );
 }

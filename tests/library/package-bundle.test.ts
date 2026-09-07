@@ -22,6 +22,7 @@ import {
   LEGACY_PACKAGE_BUNDLE_VERSION,
 } from "@selftune/control-plane";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 import {
   decodePackageCollectorProtocol,
@@ -58,9 +59,20 @@ function protocolPrefix(path: string, contentLength: number): Buffer {
   ]);
 }
 
-function workerMessage(worker: Worker): Promise<unknown> {
+const WorkerMessage = Schema.Union([
+  Schema.Literals(["ready", "renamed"]),
+  Schema.Struct({ value: Schema.String }),
+]);
+
+function workerMessage(worker: Worker): Promise<typeof WorkerMessage.Type> {
   return new Promise((resolve, reject) => {
-    worker.once("message", resolve);
+    worker.once("message", (message) => {
+      try {
+        resolve(Schema.decodeUnknownSync(WorkerMessage)(message));
+      } catch (cause) {
+        reject(cause);
+      }
+    });
     worker.once("error", reject);
   });
 }
@@ -85,9 +97,9 @@ describe("Remote Library package bundles", () => {
       "utf8",
     );
     expect(publishScript).toContain('"remote-library/package-bundle-collector.cjs"');
-    const runtimeManifest = JSON.parse(
-      readFileSync(join(import.meta.dirname, "../../packages/runtime/package.json"), "utf8"),
-    ) as { readonly files?: ReadonlyArray<string> };
+    const runtimeManifest = Schema.decodeUnknownSync(
+      Schema.fromJsonString(Schema.Struct({ files: Schema.Array(Schema.String) })),
+    )(readFileSync(join(import.meta.dirname, "../../packages/runtime/package.json"), "utf8"));
     expect(runtimeManifest.files).toContain("remote-library/package-bundle-collector.cjs");
   });
 

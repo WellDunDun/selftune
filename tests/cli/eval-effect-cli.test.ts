@@ -490,6 +490,27 @@ describe("full eval Effect command family", () => {
     }
   });
 
+  test("rejects malformed unit tests without writing a run result", () => {
+    const home = makeHome();
+    const testsPath = join(home, "tests.json");
+    writeFileSync(
+      testsPath,
+      JSON.stringify([
+        {
+          id: "invalid",
+          skill_name: "research",
+          query: "Sources",
+          assertions: [{ type: "contains", value: 42 }],
+        },
+      ]),
+    );
+    const result = runCli(home, "unit-test", "--skill", "research", "--tests", testsPath);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Failed to load unit tests");
+    expect(result.stdout).not.toContain("Loaded 1 unit tests");
+    expect(existsSync(join(home, ".selftune", "unit-tests", "research.last-run.json"))).toBe(false);
+  });
+
   test("preserves a failing unit-test suite as exit code one without direct process exit", () => {
     const home = makeHome();
     const testsPath = join(home, "tests.json");

@@ -496,7 +496,6 @@ describe("durable local install materializer", () => {
           },
           {
             now: () => "2026-07-21T03:00:02.000Z",
-            packages: { load: () => Effect.die("not used") },
             filesystem: makeNodeInstallerMaterializationFileSystem(),
             receipts: sqlite.durable,
           },
@@ -551,7 +550,6 @@ describe("durable local install materializer", () => {
           },
           {
             now: () => "2026-07-21T03:00:03.000Z",
-            packages: { load: () => Effect.die("not used") },
             filesystem: makeNodeInstallerMaterializationFileSystem(),
             receipts: sqlite.durable,
           },
@@ -958,6 +956,60 @@ describe("durable local install materializer", () => {
     }
   });
 
+  test("accepts reordered JSON keys without rewriting the immutable request", async () => {
+    const db = openDb(":memory:");
+    try {
+      const sqlite = makeSqliteInstallerReceiptAuthority(db);
+      const operation = recoveryOperation("/work/project/.agents/skills/research", "key-order");
+      await Effect.runPromise(
+        sqlite.durable.beginInstall({ operation, fenceId: operation.fenceId }),
+      );
+      db.query("UPDATE skill_install_operation_steps SET expected_before_json = ?").run(
+        '{"files":[],"kind":"directory"}',
+      );
+      const recovered = await Effect.runPromise(sqlite.durable.listRecoverableOperations());
+      expect(recovered).toHaveLength(1);
+      expect(recovered[0]?.steps[0]?.expectedBefore).toEqual({ kind: "directory", files: [] });
+      const stored = db
+        .query<{ request_json: string }, []>("SELECT request_json FROM skill_install_operations")
+        .get();
+      expect(stored?.request_json).toBe(JSON.stringify(operation));
+    } finally {
+      db.close();
+    }
+  });
+
+  test("rejects malformed typed journal fields even when their raw digest matches", async () => {
+    const db = openDb(":memory:");
+    try {
+      const sqlite = makeSqliteInstallerReceiptAuthority(db);
+      const operation = recoveryOperation(
+        "/work/project/.agents/skills/research",
+        "invalid-boolean",
+      );
+      await Effect.runPromise(
+        sqlite.durable.beginInstall({ operation, fenceId: operation.fenceId }),
+      );
+      const encoded = JSON.stringify({
+        ...operation,
+        steps: operation.steps.map((step) => ({ ...step, retainRollbackAfterCommit: "false" })),
+      });
+      db.query("UPDATE skill_install_operations SET request_json = ?, request_sha256 = ?").run(
+        encoded,
+        sha256(encoded),
+      );
+      const error = await Effect.runPromise(
+        Effect.flip(sqlite.durable.listRecoverableOperations()),
+      );
+      expect(error.code).toBe("INSTALL_JOURNAL_CORRUPT");
+      expect(
+        db.query<{ state: string }, []>("SELECT state FROM skill_install_operations").get()?.state,
+      ).toBe(operation.state);
+    } finally {
+      db.close();
+    }
+  });
+
   test("rejects every mutation-bearing normalized journal mismatch before filesystem recovery", async () => {
     const corruptions: ReadonlyArray<{
       readonly label: string;
@@ -1094,7 +1146,6 @@ describe("durable local install materializer", () => {
               },
               {
                 now: () => "2026-07-21T06:00:01.000Z",
-                packages: { load: () => Effect.die("not used") },
                 filesystem: {
                   materialize: () => Effect.die("not used"),
                   rollback: touched,

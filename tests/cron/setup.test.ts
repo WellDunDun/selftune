@@ -61,13 +61,9 @@ describe("DEFAULT_CRON_JOBS", () => {
 
   test("all jobs have required fields", () => {
     for (const job of DEFAULT_CRON_JOBS) {
-      expect(typeof job.name).toBe("string");
       expect(job.name.length).toBeGreaterThan(0);
-      expect(typeof job.cron).toBe("string");
       expect(job.cron.length).toBeGreaterThan(0);
-      expect(typeof job.message).toBe("string");
       expect(job.message.length).toBeGreaterThan(0);
-      expect(typeof job.description).toBe("string");
       expect(job.description.length).toBeGreaterThan(0);
     }
   });
@@ -136,6 +132,27 @@ describe("loadCronJobs", () => {
   test("returns empty array when file does not exist", () => {
     const jobs = loadCronJobs(join(tmpDir, "nonexistent.json"));
     expect(jobs).toEqual([]);
+  });
+
+  test("retains valid jobs alongside malformed and unrelated entries", () => {
+    const job = DEFAULT_CRON_JOBS[0];
+    const jobsPath = join(tmpDir, "mixed.json");
+    writeFileSync(
+      jobsPath,
+      JSON.stringify([
+        null,
+        4,
+        "selftune-invalid",
+        {},
+        { ...job, cron: 42 },
+        { ...job, message: null },
+        { ...job, description: [] },
+        { ...job, name: false },
+        { ...job, name: "unrelated" },
+        job,
+      ]),
+    );
+    expect(loadCronJobs(jobsPath)).toEqual([job]);
   });
 
   test("returns empty array when file contains invalid JSON", () => {

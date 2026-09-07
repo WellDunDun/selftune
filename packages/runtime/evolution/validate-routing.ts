@@ -45,7 +45,7 @@ export interface RoutingValidationOptions extends ReplayValidationOptions {
  * Check that a routing table is valid markdown table syntax with
  * `| Trigger | Workflow |` columns.
  */
-export function validateRoutingStructure(routing: string): { valid: boolean; reason: string } {
+export function validateRoutingStructure(routing: string) {
   const lines = routing
     .trim()
     .split("\n")

@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 export type Theme = "dark" | "light" | "system";
 export type ResolvedTheme = Exclude<Theme, "system">;
@@ -16,14 +24,12 @@ const ThemeProviderContext = createContext<ThemeProviderState | undefined>(undef
 const STORAGE_KEY = "selftune-theme";
 
 function systemTheme(): ResolvedTheme {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "light";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return globalThis.window?.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 function readStoredTheme(defaultTheme: Theme): Theme {
-  if (typeof window === "undefined") return defaultTheme;
   try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
+    const stored = globalThis.window?.localStorage.getItem(STORAGE_KEY);
     return stored === "light" || stored === "dark" || stored === "system" ? stored : defaultTheme;
   } catch {
     return defaultTheme;
@@ -44,10 +50,7 @@ export function ThemeProvider({
 
   useEffect(() => {
     const root = window.document.documentElement;
-    const media =
-      typeof window.matchMedia === "function"
-        ? window.matchMedia("(prefers-color-scheme: dark)")
-        : null;
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
     const apply = () => {
       const resolved: ResolvedTheme = theme === "system" ? systemTheme() : theme;
       root.classList.toggle("dark", resolved === "dark");
@@ -59,20 +62,20 @@ export function ThemeProvider({
     return () => media?.removeEventListener("change", apply);
   }, [theme]);
 
-  const setTheme = (next: Theme) => {
+  const setTheme = useCallback((next: Theme) => {
     try {
       window.localStorage.setItem(STORAGE_KEY, next);
     } catch {
       // Private browsing or locked-down storage: keep the in-memory theme.
     }
     setThemeState(next);
-  };
-
-  return (
-    <ThemeProviderContext.Provider value={{ theme, resolvedTheme, setTheme }}>
-      {children}
-    </ThemeProviderContext.Provider>
+  }, []);
+  const value = useMemo(
+    () => ({ theme, resolvedTheme, setTheme }),
+    [theme, resolvedTheme, setTheme],
   );
+
+  return <ThemeProviderContext.Provider value={value}>{children}</ThemeProviderContext.Provider>;
 }
 
 export function useTheme() {

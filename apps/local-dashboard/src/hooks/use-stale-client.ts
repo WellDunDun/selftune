@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
+import * as Schema from "effect/Schema";
+import { HealthResponse } from "@selftune/runtime/dashboard-contract/health";
 
 import { detectStaleClient, type StaleClientMismatch } from "@/lib/stale-client";
-import type { HealthResponse } from "@/types";
+
+const ClientHealth = Schema.Struct({
+  ok: HealthResponse.fields.ok,
+  service: HealthResponse.fields.service,
+  version: Schema.optionalKey(HealthResponse.fields.version),
+  spa_build_id: HealthResponse.fields.spa_build_id,
+});
 
 const BUILD_INFO = {
   version: __SELFTUNE_PACKAGE_VERSION__,
@@ -20,7 +28,7 @@ export function useStaleClient(): StaleClientMismatch | null {
       try {
         const response = await fetch("/api/health", { cache: "no-store" });
         if (!response.ok) return;
-        const payload = (await response.json()) as HealthResponse;
+        const payload = Schema.decodeUnknownSync(ClientHealth)(await response.json());
         if (isActive) setMismatch(detectStaleClient(payload, BUILD_INFO));
       } catch {
         // Keep the current state through transient health-check failures.

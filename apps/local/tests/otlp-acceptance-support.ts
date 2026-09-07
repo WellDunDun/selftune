@@ -8,7 +8,10 @@ import * as Layer from "effect/Layer";
 
 import { resolveSelftunePaths } from "@selftune/config";
 import { openDb } from "@selftune/local-store";
-import { LocalTraceImporter } from "@selftune/observability/local-trace-importer";
+import {
+  LocalTraceImporter,
+  type LocalTraceImportRequest,
+} from "@selftune/observability/local-trace-importer";
 import { LocalTelemetryBatch, LocalTelemetrySpan } from "@selftune/observability/trace-batch";
 import { makeDuckDbNodeApiAnalyticalStoreLive } from "@selftune/observability/duckdb-node-api";
 import { normalizeOtlpExport } from "@selftune/observability/otlp";
@@ -130,7 +133,9 @@ export function checkpoints(directory: string, sourceKind = "otlp") {
   try {
     return Number(
       database
-        .query("SELECT count(*) AS count FROM analytical_import_checkpoints WHERE source_kind = ?")
+        .query<{ count: number }, [string]>(
+          "SELECT count(*) AS count FROM analytical_import_checkpoints WHERE source_kind = ?",
+        )
         .get(sourceKind)?.count,
     );
   } finally {
@@ -165,7 +170,7 @@ const importer = (directory: string) => {
     makeLocalTraceImporterLive(database),
     makeDuckDbNodeApiAnalyticalStoreLive(paths.localAnalyticsPath),
   );
-  const run = (request: object) =>
+  const run = (request: LocalTraceImportRequest) =>
     Effect.runPromise(
       Effect.gen(function* () {
         return yield* (yield* LocalTraceImporter).importTrace(request);
@@ -230,6 +235,7 @@ export async function importNativeCodex(directory: string, schemaVersion = "1.0.
       source_kind: "codex",
       source_revision: "codex-native-1",
       normalizer_version: "native-v1",
+      // @ts-expect-error Deliberately unsupported wire version verifies runtime rejection before writes.
       batch: schemaVersion === "1.0.0" ? batch : { ...batch, schema_version: schemaVersion },
     });
   } finally {

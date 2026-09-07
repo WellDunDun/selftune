@@ -1,3 +1,6 @@
+import { Option, Schema } from "effect";
+import { flow } from "effect/Function";
+
 /** Semantic resources shared by dashboard queries, mutations, and live events. */
 export const DashboardResource = {
   libraryInventory: "library-inventory",
@@ -151,34 +154,30 @@ export const dashboardActionFinishedResources = [
   DashboardResource.decisions,
 ] as const satisfies readonly DashboardResource[];
 
-export interface DashboardUpdateEvent {
-  readonly type: "update";
-  readonly ts: number;
-  readonly resources: readonly DashboardResource[];
+const Resource = Schema.Literals(Object.values(DashboardResource));
+export const DashboardUpdateEvent = Schema.Struct({
+  type: Schema.Literal("update"),
+  ts: Schema.Number,
+  resources: Schema.Array(Resource),
+});
+export type DashboardUpdateEvent = typeof DashboardUpdateEvent.Type;
+export const isDashboardResource = Schema.is(Resource);
+
+// Older events can omit resources or contain a mix of recognized and retired names.
+const ResourcePayload = Schema.Struct({ resources: Schema.Array(Schema.Unknown) });
+function resourcesFromDecoded(
+  payload: Option.Option<typeof ResourcePayload.Type>,
+): readonly DashboardResource[] {
+  if (Option.isNone(payload)) return databaseLiveResources;
+  const resources = payload.value.resources.filter(isDashboardResource);
+  return resources.length > 0 ? resources : databaseLiveResources;
 }
 
-const dashboardResourceValues = new Set<string>(Object.values(DashboardResource));
-
-export function isDashboardResource(value: unknown): value is DashboardResource {
-  return typeof value === "string" && dashboardResourceValues.has(value);
-}
-
-export function dashboardUpdateResources(value: unknown): readonly DashboardResource[] {
-  if (typeof value !== "object" || value === null || !("resources" in value)) {
-    return databaseLiveResources;
-  }
-  const resources = value.resources;
-  if (!Array.isArray(resources)) return databaseLiveResources;
-  const valid = resources.filter(isDashboardResource);
-  return valid.length > 0 ? valid : databaseLiveResources;
-}
-
-export function dashboardUpdateResourcesFromJson(value: unknown): readonly DashboardResource[] {
-  if (typeof value !== "string") return databaseLiveResources;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return dashboardUpdateResources(parsed);
-  } catch {
-    return databaseLiveResources;
-  }
-}
+export const dashboardUpdateResources = flow(
+  Schema.decodeUnknownOption(ResourcePayload),
+  resourcesFromDecoded,
+);
+export const dashboardUpdateResourcesFromJson = flow(
+  Schema.decodeUnknownOption(Schema.fromJsonString(ResourcePayload)),
+  resourcesFromDecoded,
+);

@@ -1,3 +1,6 @@
+import { Schema } from "effect";
+import { SyncPreferences } from "@selftune/control-plane";
+
 export type PortfolioClassification =
   | "protected"
   | "unobserved"
@@ -50,19 +53,20 @@ export interface PortfolioAuditResult {
   skills: PortfolioAuditEntry[];
 }
 
-export interface QuarantineRecord {
-  schema_version: 1;
-  quarantine_id: string;
-  status: "preparing" | "quarantined" | "restoring" | "restored";
-  skill_name: string;
-  skill_scope: InstalledSkillScope;
-  original_package_path: string;
-  original_skill_path: string;
-  quarantined_package_path: string;
-  package_version_hash: string | null;
-  quarantined_at: string;
-  restored_at: string | null;
-}
+export const QuarantineRecord = Schema.Struct({
+  schema_version: Schema.Literal(1),
+  quarantine_id: Schema.String,
+  status: Schema.Literals(["preparing", "quarantined", "restoring", "restored"]),
+  skill_name: Schema.String,
+  skill_scope: Schema.Literals(["project", "global", "admin", "system", "unknown"]),
+  original_package_path: Schema.String,
+  original_skill_path: Schema.String,
+  quarantined_package_path: Schema.String,
+  package_version_hash: Schema.NullOr(Schema.String),
+  quarantined_at: Schema.String,
+  restored_at: Schema.NullOr(Schema.String),
+});
+export type QuarantineRecord = typeof QuarantineRecord.Type;
 
 export interface QuarantineReceipt {
   success: true;
@@ -96,39 +100,45 @@ export interface PortfolioResponse {
 export type HarnessId = string;
 export type HarnessConnectionStatus = "connected" | "detected" | "not_detected";
 
-export interface HarnessConnection {
-  id: HarnessId;
-  name: string;
-  description: string;
-  icon: {
-    src: string;
-    fit: "contain" | "cover";
-    inset: "none" | "sm";
-    invert_in_dark?: boolean;
-  };
-  documentation_url: string | null;
-  source_merge: { model_override: boolean } | null;
-  status: HarnessConnectionStatus;
-  detected: boolean;
-  connected: boolean;
-  import_available: boolean;
-  hooks_supported: boolean;
-  hooks_installed: boolean;
-  detail: string;
-}
+export const HarnessConnection = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  description: Schema.String,
+  icon: Schema.Struct({
+    src: Schema.String,
+    fit: Schema.Literals(["contain", "cover"]),
+    inset: Schema.Literals(["none", "sm"]),
+    invert_in_dark: Schema.optionalKey(Schema.Boolean),
+  }),
+  documentation_url: Schema.NullOr(Schema.String),
+  source_merge: Schema.NullOr(Schema.Struct({ model_override: Schema.Boolean })),
+  status: Schema.Literals(["connected", "detected", "not_detected"]),
+  detected: Schema.Boolean,
+  connected: Schema.Boolean,
+  import_available: Schema.Boolean,
+  hooks_supported: Schema.Boolean,
+  hooks_installed: Schema.Boolean,
+  detail: Schema.String,
+});
+export type HarnessConnection = typeof HarnessConnection.Type;
 
 export type OnboardingFeatureId =
   | "observability"
   | "health_recommendations"
   | "autonomous_improvement";
 
-export interface OnboardingPreferences {
-  version: 1;
-  completed: boolean;
-  import_sources: Record<HarnessId, boolean>;
-  hook_harnesses: Record<Exclude<HarnessId, "openclaw">, boolean>;
-  features: Record<OnboardingFeatureId, boolean>;
-}
+export const OnboardingPreferences = Schema.Struct({
+  version: Schema.Literal(1),
+  completed: Schema.mutableKey(Schema.Boolean),
+  import_sources: Schema.Record(Schema.String, Schema.mutableKey(Schema.Boolean)),
+  hook_harnesses: Schema.Record(Schema.String, Schema.mutableKey(Schema.Boolean)),
+  features: Schema.Struct({
+    observability: Schema.mutableKey(Schema.Boolean),
+    health_recommendations: Schema.mutableKey(Schema.Boolean),
+    autonomous_improvement: Schema.mutableKey(Schema.Boolean),
+  }),
+});
+export type OnboardingPreferences = typeof OnboardingPreferences.Type;
 
 export interface ApplyOnboardingRequest {
   import_sources: HarnessId[];
@@ -136,63 +146,69 @@ export interface ApplyOnboardingRequest {
   features: Record<OnboardingFeatureId, boolean>;
 }
 
-export interface OnboardingInstallResult {
-  harness_id: Exclude<HarnessId, "openclaw">;
-  status: "installed" | "already_installed" | "failed";
-  message: string;
-}
+export const OnboardingInstallResult = Schema.Struct({
+  harness_id: Schema.String,
+  status: Schema.Literals(["installed", "already_installed", "failed"]),
+  message: Schema.String,
+});
+export type OnboardingInstallResult = typeof OnboardingInstallResult.Type;
 
-export interface OnboardingSourceSyncResult {
-  status: "processed" | "no_changes" | "failed" | "skipped";
-  message: string | null;
-}
+export const OnboardingSourceSyncResult = Schema.Struct({
+  status: Schema.Literals(["processed", "no_changes", "failed", "skipped"]),
+  message: Schema.NullOr(Schema.String),
+});
+export type OnboardingSourceSyncResult = typeof OnboardingSourceSyncResult.Type;
 
 export type DesktopScheduleFormat = "launchd" | "systemd" | "unsupported";
 export type DesktopScheduleJobId = "selftune-sync" | "selftune-status" | "selftune-orchestrate";
 
-export interface DesktopScheduleJob {
-  id: DesktopScheduleJobId;
-  label: string;
-  description: string;
-  command: string;
-  default_schedule: string;
-  schedule: string;
-  enabled: boolean;
-  active: boolean;
-}
+export const DesktopScheduleJob = Schema.Struct({
+  id: Schema.Literals(["selftune-sync", "selftune-status", "selftune-orchestrate"]),
+  label: Schema.String,
+  description: Schema.String,
+  command: Schema.String,
+  default_schedule: Schema.String,
+  schedule: Schema.String,
+  enabled: Schema.Boolean,
+  active: Schema.Boolean,
+});
+export type DesktopScheduleJob = typeof DesktopScheduleJob.Type;
 
-export interface DesktopSettingsResponse {
-  harnesses: HarnessConnection[];
-  agent_skill: {
-    installed: boolean;
-    locations: string[];
-    install_command: string;
-  };
-  onboarding: OnboardingPreferences;
-  cloud_account: {
-    linked: boolean;
-    cloud_user_id: string | null;
-    cloud_org_id: string | null;
-  };
-  remote_library: {
-    configured: boolean;
-    credential_provider:
-      | "environment"
-      | "file"
-      | "linux-secret-service"
-      | "macos-keychain"
-      | "windows-credential-manager"
-      | null;
-    url: string | null;
-    preferences: import("@selftune/control-plane").SyncPreferences;
-  };
-  schedule: {
-    supported: boolean;
-    format: DesktopScheduleFormat;
-    settings_path: string;
-    jobs: DesktopScheduleJob[];
-  };
-}
+export const DesktopSettingsResponse = Schema.Struct({
+  harnesses: Schema.mutable(Schema.Array(HarnessConnection)),
+  agent_skill: Schema.Struct({
+    installed: Schema.Boolean,
+    locations: Schema.mutable(Schema.Array(Schema.String)),
+    install_command: Schema.String,
+  }),
+  onboarding: OnboardingPreferences,
+  cloud_account: Schema.Struct({
+    linked: Schema.Boolean,
+    cloud_user_id: Schema.NullOr(Schema.String),
+    cloud_org_id: Schema.NullOr(Schema.String),
+  }),
+  remote_library: Schema.Struct({
+    configured: Schema.Boolean,
+    credential_provider: Schema.NullOr(
+      Schema.Literals([
+        "environment",
+        "file",
+        "linux-secret-service",
+        "macos-keychain",
+        "windows-credential-manager",
+      ]),
+    ),
+    url: Schema.NullOr(Schema.String),
+    preferences: SyncPreferences,
+  }),
+  schedule: Schema.Struct({
+    supported: Schema.Boolean,
+    format: Schema.Literals(["launchd", "systemd", "unsupported"]),
+    settings_path: Schema.String,
+    jobs: Schema.mutable(Schema.Array(DesktopScheduleJob)),
+  }),
+});
+export type DesktopSettingsResponse = typeof DesktopSettingsResponse.Type;
 
 export interface StartCloudAccountLinkResponse {
   link_id: string;
@@ -213,14 +229,25 @@ export interface CompleteCloudAccountLinkResponse {
     | { status: "failed"; message: string };
 }
 
-export interface ApplyOnboardingResponse extends DesktopSettingsResponse {
-  install_results: OnboardingInstallResult[];
-  source_sync: OnboardingSourceSyncResult;
-}
+export const ApplyOnboardingResponse = Schema.Struct({
+  ...DesktopSettingsResponse.fields,
+  install_results: Schema.mutable(Schema.Array(OnboardingInstallResult)),
+  source_sync: OnboardingSourceSyncResult,
+});
+export type ApplyOnboardingResponse = typeof ApplyOnboardingResponse.Type;
 
-export interface UpdateDesktopScheduleRequest {
-  jobs: Array<Pick<DesktopScheduleJob, "id" | "enabled" | "schedule">>;
-}
+export const UpdateDesktopScheduleRequest = Schema.Struct({
+  jobs: Schema.mutable(
+    Schema.Array(
+      Schema.Struct({
+        id: DesktopScheduleJob.fields.id,
+        enabled: Schema.Boolean,
+        schedule: Schema.String,
+      }),
+    ),
+  ),
+});
+export type UpdateDesktopScheduleRequest = typeof UpdateDesktopScheduleRequest.Type;
 
 export interface UpdateRemoteLibraryRequest {
   url: string;

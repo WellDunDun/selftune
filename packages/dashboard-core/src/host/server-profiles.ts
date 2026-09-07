@@ -1,4 +1,5 @@
 import type { DashboardFeatureFlags, DashboardHostKind } from "./capabilities";
+import { z } from "zod";
 
 export type ServerProfileAuthentication =
   | { readonly kind: "desktop_local" }
@@ -24,6 +25,34 @@ export interface ServerProfile {
   readonly status: ServerProfileStatus;
   readonly system: boolean;
 }
+
+const serializedProfileSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["local", "cloud", "selfhost"]),
+  name: z.string(),
+  origin: z.string(),
+  authentication: z.object({ kind: z.enum(["desktop_local", "cookie", "bearer_session"]) }),
+  capabilities: z.object({
+    analytics: z.boolean(),
+    registry: z.boolean(),
+    signals: z.boolean(),
+    proposals: z.boolean(),
+    billing: z.boolean(),
+    teamAdmin: z.boolean(),
+    runtimeStatus: z.boolean(),
+  }),
+  status: z.discriminatedUnion("state", [
+    z.object({ state: z.literal("ready") }),
+    z.object({
+      state: z.enum(["unreachable", "unauthenticated", "incompatible", "upgrade_required"]),
+      message: z.string(),
+      actionLabel: z.string(),
+      actionHref: z.string().optional(),
+    }),
+  ]),
+  system: z.boolean(),
+}) satisfies z.ZodType<ServerProfile>;
+const serializedProfilesSchema = z.array(serializedProfileSchema.nullable().catch(null));
 
 export interface ManagedServerProfileInput {
   readonly id: string;
@@ -171,7 +200,9 @@ export function removeServerProfile(
 }
 
 export function serializeManagedServerProfiles(profiles: ReadonlyArray<ServerProfile>): string {
-  return JSON.stringify(profiles.filter(isManagedProfile));
+  return JSON.stringify(
+    profiles.filter(isManagedProfile).map((profile) => serializedProfileSchema.parse(profile)),
+  );
 }
 
 export interface ServerProfilesSnapshot {
@@ -274,17 +305,14 @@ export function createServerProfileController(options: {
       notify();
     },
     reconcileExternal(serialized) {
-      let parsed: unknown;
+      let parsed: Array<ServerProfile | null>;
       try {
-        parsed = JSON.parse(serialized);
+        parsed = serializedProfilesSchema.parse(JSON.parse(serialized));
       } catch {
         return;
       }
-      if (!Array.isArray(parsed)) return;
       profiles = normalizeServerProfiles(
-        parsed.filter(
-          (value): value is ServerProfile => typeof value === "object" && value !== null,
-        ),
+        parsed.filter((value) => value !== null),
         options.thisMac,
       );
       if (!profiles.some((profile) => profile.id === activeProfileId)) {

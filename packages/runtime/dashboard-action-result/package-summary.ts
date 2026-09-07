@@ -1,6 +1,8 @@
+import type { CliJsonOutput } from "../utils/json-output.js";
 import type { DashboardActionResultSummary } from "../dashboard-contract.js";
 import {
   readBoolean,
+  readCandidateAcceptanceDecision,
   readNumber,
   readObject,
   readPackageBodySummary,
@@ -15,7 +17,7 @@ import {
 import { readCreatePackageEvaluationWatchSummary } from "./watch-summary.js";
 
 export function buildPackageEvaluationSummary(
-  packageEvaluation: Record<string, unknown> | null,
+  packageEvaluation: CliJsonOutput | null,
   options: {
     deployed: boolean | null;
     reason: string | null;
@@ -33,7 +35,9 @@ export function buildPackageEvaluationSummary(
   const packageParentCandidateId = readString(packageEvaluation["parent_candidate_id"]);
   const packageCandidateGeneration = readNumber(packageEvaluation["candidate_generation"]);
   const packageCandidateAcceptance = readObject(packageEvaluation["candidate_acceptance"]);
-  const packageCandidateAcceptanceDecision = readString(packageCandidateAcceptance?.["decision"]);
+  const packageCandidateAcceptanceDecision = readCandidateAcceptanceDecision(
+    packageCandidateAcceptance?.["decision"],
+  );
   const packageCandidateAcceptanceRationale = readString(packageCandidateAcceptance?.["rationale"]);
   const packageEvidence = readPackageEvidenceSummary(packageEvaluation["evidence"]);
   const packageEfficiency = readPackageEfficiencySummary(packageEvaluation["efficiency"]);
@@ -51,28 +55,19 @@ export function buildPackageEvaluationSummary(
     after_pass_rate: readNumber(baseline?.["with_skill_pass_rate"]),
     net_change: readNumber(baseline?.["lift"]),
     validation_mode: readString(replay?.["validation_mode"]),
-    ...(recommendedCommand ? { recommended_command: recommendedCommand } : {}),
-    ...(packageEvaluationSource ? { package_evaluation_source: packageEvaluationSource } : {}),
-    ...(packageCandidateId ? { package_candidate_id: packageCandidateId } : {}),
-    ...(packageParentCandidateId ? { package_parent_candidate_id: packageParentCandidateId } : {}),
-    ...(packageCandidateGeneration != null
-      ? { package_candidate_generation: packageCandidateGeneration }
-      : {}),
-    ...(packageCandidateAcceptanceDecision
-      ? {
-          package_candidate_acceptance_decision:
-            packageCandidateAcceptanceDecision as DashboardActionResultSummary["package_candidate_acceptance_decision"],
-        }
-      : {}),
-    ...(packageCandidateAcceptanceRationale
-      ? { package_candidate_acceptance_rationale: packageCandidateAcceptanceRationale }
-      : {}),
-    ...(packageEvidence ? { package_evidence: packageEvidence } : {}),
-    ...(packageEfficiency ? { package_efficiency: packageEfficiency } : {}),
-    ...(packageRouting ? { package_routing: packageRouting } : {}),
-    ...(packageBody ? { package_body: packageBody } : {}),
-    ...(packageGrading ? { package_grading: packageGrading } : {}),
-    ...(packageUnitTests ? { package_unit_tests: packageUnitTests } : {}),
-    ...(packageWatch ? { package_watch: packageWatch } : {}),
+    recommended_command: recommendedCommand ?? undefined,
+    package_evaluation_source: packageEvaluationSource ?? undefined,
+    package_candidate_id: packageCandidateId ?? undefined,
+    package_parent_candidate_id: packageParentCandidateId ?? undefined,
+    package_candidate_generation: packageCandidateGeneration ?? undefined,
+    package_candidate_acceptance_decision: packageCandidateAcceptanceDecision ?? undefined,
+    package_candidate_acceptance_rationale: packageCandidateAcceptanceRationale ?? undefined,
+    package_evidence: packageEvidence ?? undefined,
+    package_efficiency: packageEfficiency ?? undefined,
+    package_routing: packageRouting ?? undefined,
+    package_body: packageBody ?? undefined,
+    package_grading: packageGrading ?? undefined,
+    package_unit_tests: packageUnitTests ?? undefined,
+    package_watch: packageWatch ?? undefined,
   };
 }

@@ -1,8 +1,30 @@
 import { describe, expect, it } from "bun:test";
+import * as Schema from "effect/Schema";
 
-import { createLineBuffer, parseReadyPort } from "./sidecar-protocol";
+import { createLineBuffer, parseReadyPort, SidecarHealth } from "./sidecar-protocol";
 
 describe("desktop sidecar protocol", () => {
+  it("requires a complete standalone health identity before attachment", () => {
+    const health = {
+      pid: 123,
+      runtime_instance_id: "runtime-1",
+      process_mode: "standalone",
+      config_dir: "/temporary/config",
+    } satisfies typeof SidecarHealth.Type;
+    const decode = Schema.decodeUnknownSync(SidecarHealth);
+    expect(decode(health)).toEqual(health);
+    for (const invalid of [
+      null,
+      [],
+      {},
+      { ...health, pid: "123" },
+      { ...health, runtime_instance_id: null },
+      { ...health, process_mode: "embedded" },
+      { ...health, config_dir: 3 },
+    ]) {
+      expect(() => decode(invalid)).toThrow();
+    }
+  });
   it("accepts only a valid readiness sentinel port", () => {
     expect(parseReadyPort("SELFTUNE_READY:3141")).toBe(3141);
     expect(parseReadyPort("server running on 3141")).toBeNull();

@@ -4,12 +4,13 @@ import { link, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
 
 import {
-  makeWindowsServiceInstallationStore,
+  makeWindowsInstallationStoreLayer,
   type WindowsInstallationFileSystem,
   type WindowsInstallationProcess,
-  type WindowsServiceInstallationStoreWithUserControl,
 } from "./store.js";
 import {
   windowsServiceArtifactQuarantinePath,
@@ -17,6 +18,7 @@ import {
   type WindowsServiceInstallationArtifactStore,
 } from "../artifact-store.js";
 import { sha256Hex } from "./model.js";
+import { WindowsInstallationIOError } from "./io-error.js";
 
 export interface LiveWindowsServiceInstallationStoreOptions {
   readonly process: WindowsInstallationProcess;
@@ -62,10 +64,13 @@ function isMissingFileError(cause: unknown): boolean {
   return cause instanceof Error && "code" in cause && cause.code === "ENOENT";
 }
 
-function promiseEffect<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
+function promiseEffect<A>(
+  operation: WindowsInstallationIOError["operation"],
+  run: () => Promise<A>,
+): Effect.Effect<A, WindowsInstallationIOError> {
   return Effect.tryPromise({
-    try: operation,
-    catch: (cause) => cause,
+    try: run,
+    catch: (cause) => WindowsInstallationIOError.fromCause(operation, cause),
   });
 }
 
@@ -92,9 +97,9 @@ const liveInstallationFileSystem: LiveWindowsInstallationFileSystemDependencies 
 function writeAllAndSync(
   file: LiveWindowsServiceInstallationFile,
   contents: Uint8Array,
-): Effect.Effect<void, unknown> {
+): Effect.Effect<void, WindowsInstallationIOError> {
   return Effect.uninterruptible(
-    promiseEffect(async () => {
+    promiseEffect("writeAndSync", async () => {
       let offset = 0;
       while (offset < contents.byteLength) {
         // oxlint-disable-next-line no-await-in-loop -- each short write determines the next offset
@@ -111,9 +116,9 @@ function writeAllAndSync(
 
 function closePreservingUseFailure(
   file: LiveWindowsServiceInstallationFile,
-  useExit: Exit.Exit<unknown, unknown>,
-): Effect.Effect<void, unknown> {
-  return promiseEffect(() => file.close()).pipe(
+  useExit: Exit.Exit<void, WindowsInstallationIOError>,
+): Effect.Effect<void, WindowsInstallationIOError> {
+  return promiseEffect("close", () => file.close()).pipe(
     Effect.catchCause((closeCause) =>
       Exit.isFailure(useExit)
         ? Effect.failCause(Cause.combine(useExit.cause, closeCause))
@@ -215,20 +220,22 @@ async function removeMatchingArtifact(
 
 export function makeLiveWindowsServiceInstallationArtifactStore(
   fileSystem: LiveWindowsServiceInstallationArtifactFileSystem = liveArtifactFileSystem,
-): WindowsServiceInstallationArtifactStore {
+): WindowsServiceInstallationArtifactStore<WindowsInstallationIOError> {
   return {
     read: (path) =>
-      promiseEffect(() =>
+      promiseEffect("read", () =>
         fileSystem.read(path).then(
           (contents) => contents,
           (cause: unknown) => (isMissingFileError(cause) ? null : Promise.reject(cause)),
         ),
       ),
     removeMatching: (removal) =>
-      Effect.uninterruptible(promiseEffect(() => removeMatchingArtifact(fileSystem, removal))),
+      Effect.uninterruptible(
+        promiseEffect("removeMatching", () => removeMatchingArtifact(fileSystem, removal)),
+      ),
     write: (path, contents) =>
       Effect.acquireUseRelease(
-        promiseEffect(() => fileSystem.openExclusive(path, 0o600)),
+        promiseEffect("openExclusive", () => fileSystem.openExclusive(path, 0o600)),
         (file) => writeAllAndSync(file, contents),
         closePreservingUseFailure,
       ),
@@ -237,18 +244,18 @@ export function makeLiveWindowsServiceInstallationArtifactStore(
 
 export function makeLiveWindowsInstallationFileSystem(
   fileSystem: LiveWindowsInstallationFileSystemDependencies = liveInstallationFileSystem,
-): WindowsInstallationFileSystem {
+): WindowsInstallationFileSystem<WindowsInstallationIOError> {
   return {
-    makeDirectory: (path) => promiseEffect(() => fileSystem.makeDirectory(path)),
+    makeDirectory: (path) => promiseEffect("makeDirectory", () => fileSystem.makeDirectory(path)),
     readUtf8File: (path) =>
-      promiseEffect(() =>
+      promiseEffect("readUtf8File", () =>
         fileSystem.readUtf8File(path).then(
           (contents) => contents,
           (cause: unknown) => (isMissingFileError(cause) ? null : Promise.reject(cause)),
         ),
       ),
     removeFile: (path) =>
-      promiseEffect(() =>
+      promiseEffect("removeFile", () =>
         fileSystem.remove(path).then(
           () => undefined,
           (cause: unknown) => (isMissingFileError(cause) ? undefined : Promise.reject(cause)),
@@ -257,26 +264,31 @@ export function makeLiveWindowsInstallationFileSystem(
     rename: (from, to) =>
       // Receipt persistence invokes this after writeUtf8File synced and closed the temp file.
       // Node has no reliable Windows directory fsync, so metadata durability is not claimed.
-      promiseEffect(() => fileSystem.rename(from, to)),
+      promiseEffect("rename", () => fileSystem.rename(from, to)),
     writeUtf8File: (path, contents, options) =>
       Effect.acquireUseRelease(
-        promiseEffect(() => fileSystem.openExclusive(path, options.mode)),
+        promiseEffect("openExclusive", () => fileSystem.openExclusive(path, options.mode)),
         (file) => writeAllAndSync(file, new TextEncoder().encode(contents)),
         closePreservingUseFailure,
       ),
   };
 }
 
-export function makeLiveWindowsServiceInstallationStore(
+export class WindowsInstallationArtifacts extends Context.Service<
+  WindowsInstallationArtifacts,
+  WindowsServiceInstallationArtifactStore<WindowsInstallationIOError>
+>()("SelfTune/WindowsInstallationArtifacts") {}
+
+export const WindowsInstallationArtifactsLive = Layer.sync(WindowsInstallationArtifacts)(() =>
+  makeLiveWindowsServiceInstallationArtifactStore(),
+);
+
+export function makeLiveWindowsInstallationStoreLayer(
   options: LiveWindowsServiceInstallationStoreOptions,
-): WindowsServiceInstallationStoreWithUserControl {
-  return makeWindowsServiceInstallationStore({
+) {
+  return makeWindowsInstallationStoreLayer({
     clock: {
-      now: () =>
-        Effect.try({
-          try: () => new Date(),
-          catch: (cause) => cause,
-        }),
+      now: () => Effect.sync(() => new Date()),
     },
     fileSystem: makeLiveWindowsInstallationFileSystem(),
     process: options.process,
@@ -284,7 +296,7 @@ export function makeLiveWindowsServiceInstallationStore(
       bytes: (length) =>
         Effect.try({
           try: () => randomBytes(length),
-          catch: (cause) => cause,
+          catch: (cause) => WindowsInstallationIOError.fromCause("randomBytes", cause),
         }),
     },
     systemRoot: options.systemRoot,

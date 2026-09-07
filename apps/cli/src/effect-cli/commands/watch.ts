@@ -80,34 +80,32 @@ function toCliError(
       );
 }
 
-export function runWatchActionWithDependencies(
+export const runWatchActionWithDependencies = Effect.fn("selftune.cli.watch")(function* (
   input: WatchProgramInput,
   dependencies: WatchActionDependencies,
 ) {
-  return Effect.fn("selftune.cli.watch")(function* () {
-    const runtime = yield* Effect.tryPromise({
-      try: dependencies.loadModule,
-      catch: importFailure,
-    });
-    const program = yield* Effect.try({
-      try: () => runtime.runWatchProgram(input),
-      catch: (cause) => toCliError(cause, runtime.isWatchInternalFailure),
-    });
-    const diagnosticsLayer = runtime.makeWatchDiagnosticsLayer(dependencies.writeStderr);
-    const result = yield* program.pipe(
-      Effect.provide(Layer.merge(runtime.watchLiveLayer, diagnosticsLayer)),
-      Effect.mapError((cause) => toCliError(cause, runtime.isWatchInternalFailure)),
-    );
-    yield* Effect.try({
-      try: () => {
-        for (const message of result.stderr) dependencies.writeStderr(message);
-        for (const message of result.stdout) dependencies.writeStdout(message);
-        dependencies.setExitCode(result.exitCode);
-      },
-      catch: toCliError,
-    });
-  })();
-}
+  const runtime = yield* Effect.tryPromise({
+    try: dependencies.loadModule,
+    catch: importFailure,
+  });
+  const program = yield* Effect.try({
+    try: () => runtime.runWatchProgram(input),
+    catch: (cause) => toCliError(cause, runtime.isWatchInternalFailure),
+  });
+  const diagnosticsLayer = runtime.makeWatchDiagnosticsLayer(dependencies.writeStderr);
+  const result = yield* program.pipe(
+    Effect.provide(Layer.merge(runtime.watchLiveLayer, diagnosticsLayer)),
+    Effect.mapError((cause) => toCliError(cause, runtime.isWatchInternalFailure)),
+  );
+  yield* Effect.try({
+    try: () => {
+      for (const message of result.stderr) dependencies.writeStderr(message);
+      for (const message of result.stdout) dependencies.writeStdout(message);
+      dependencies.setExitCode(result.exitCode);
+    },
+    catch: toCliError,
+  });
+});
 
 export function makeLiveWatchAction(
   dependencies: WatchActionDependencies = LIVE_DEPENDENCIES,

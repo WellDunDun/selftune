@@ -141,6 +141,23 @@ describe("Windows service mutation lock", () => {
     expect(isWindowsServiceMutationLockBusy(new Error("database is unavailable"))).toBe(false);
   });
 
+  it("terminates cause cycles and keeps valid nested busy evidence beside malformed metadata", () => {
+    const cyclic = new Error("cyclic cause");
+    cyclic.cause = cyclic;
+    expect(isWindowsServiceMutationLockBusy(cyclic)).toBe(false);
+    expect(
+      isWindowsServiceMutationLockBusy({
+        code: 123,
+        errno: "unrecognized",
+        cause: { code: "SQLITE_BUSY_TIMEOUT" },
+      }),
+    ).toBe(true);
+    expect(isWindowsServiceMutationLockBusy({ code: "SQLITE_BUSYNESS" })).toBe(false);
+    expect(isWindowsServiceMutationLockBusy({ code: "SQLITE_LOCKEDOTHER" })).toBe(false);
+    expect(isWindowsServiceMutationLockBusy({ code: "SQLITE_BUSY\n" })).toBe(false);
+    expect(isWindowsServiceMutationLockBusy({ cause: null })).toBe(false);
+  });
+
   it("establishes the old-binary fence before opening SQLite", async () => {
     const events: string[] = [];
     const fake = fakeDatabases();
@@ -151,6 +168,7 @@ describe("Windows service mutation lock", () => {
       },
       {
         diagnose: readyCompatibility.diagnose,
+        repairStale: readyCompatibility.repairStale,
         ensureFence: () =>
           Effect.sync(() => {
             events.push("ensure-legacy-fence");
@@ -376,6 +394,31 @@ async function runAcquireAttempt(databasePath: string, holdMilliseconds = 0): Pr
   };
 }
 
+function spawnControlledAcquireAttempt(databasePath: string, readyPath: string) {
+  return spawnLockProcess(
+    `${childPrelude}
+      try {
+        const lease = await Effect.runPromise(lock.acquire(scope));
+        writeFileSync(process.env.SELFTUNE_TEST_READY, "ready");
+        await new Promise((resolveRelease) => process.stdin.once("data", resolveRelease));
+        await Effect.runPromise(lock.release(lease));
+        console.log("ACQUIRED");
+      } catch (cause) {
+        if (cause?._tag === "WindowsServiceMutationLockError") {
+          console.log("HELD " + cause.operation);
+        } else {
+          console.error(cause);
+          process.exitCode = 1;
+        }
+      }
+    `,
+    {
+      SELFTUNE_TEST_LOCK_DB: databasePath,
+      SELFTUNE_TEST_READY: readyPath,
+    },
+  );
+}
+
 describe("Windows service mutation lock subprocess ownership", () => {
   it("uses real SQLite contention and reacquires after the holder is SIGKILLed", async () => {
     const directory = mkdtempSync(join(tmpdir(), "selftune-windows-service-lock-"));
@@ -408,16 +451,39 @@ describe("Windows service mutation lock subprocess ownership", () => {
         code: null,
         signal: "SIGKILL",
       });
-      const successors = await Promise.all([
-        runAcquireAttempt(databasePath, 750),
-        runAcquireAttempt(databasePath, 750),
-      ]);
-      expect(successors.map((result) => result.stdout).toSorted()).toEqual([
-        "ACQUIRED",
-        "HELD acquire-user-service-mutation-lock",
-      ]);
-      for (const successor of successors) {
-        expect(successor).toMatchObject({ code: 0, signal: null, stderr: "" });
+      const successorReadyPath = join(directory, "successor-ready");
+      const successorHolder = spawnControlledAcquireAttempt(databasePath, successorReadyPath);
+      const successorClosed = waitForClose(successorHolder.child);
+      let releaseRequested = false;
+      try {
+        await waitForFile(successorReadyPath, successorHolder.child);
+        const contender = await runAcquireAttempt(databasePath);
+        releaseRequested = true;
+        successorHolder.child.stdin.end("release\n");
+        const closedSuccessor = await successorClosed;
+        const successors = [
+          contender,
+          {
+            ...closedSuccessor,
+            stderr: successorHolder.stderr().trim(),
+            stdout: successorHolder.stdout().trim(),
+          },
+        ];
+        expect(successors.map((result) => result.stdout).toSorted()).toEqual([
+          "ACQUIRED",
+          "HELD acquire-user-service-mutation-lock",
+        ]);
+        for (const successor of successors) {
+          expect(successor).toMatchObject({ code: 0, signal: null, stderr: "" });
+        }
+      } finally {
+        if (successorHolder.child.exitCode === null && successorHolder.child.signalCode === null) {
+          if (!releaseRequested) successorHolder.child.stdin.end("release\n");
+          successorHolder.child.kill("SIGKILL");
+          await successorClosed;
+        }
+        successorHolder.child.stdout.destroy();
+        successorHolder.child.stderr.destroy();
       }
       await expect(runAcquireAttempt(databasePath)).resolves.toMatchObject({
         code: 0,

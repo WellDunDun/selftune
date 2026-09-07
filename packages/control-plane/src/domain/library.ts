@@ -35,6 +35,15 @@ export const LibraryOrigin = Schema.Struct({
 });
 export type LibraryOrigin = typeof LibraryOrigin.Type;
 
+export const SkillDiscoveryMetadata = Schema.Struct({
+  name: Schema.String,
+  description: Schema.String,
+  whenToUse: Schema.optionalKey(Schema.String),
+  disableModelInvocation: Schema.Boolean,
+  originalSkillPath: Schema.String,
+});
+export type SkillDiscoveryMetadata = typeof SkillDiscoveryMetadata.Type;
+
 export const LibraryObservation = Schema.Struct({
   skillName: Schema.String,
   sourceKind: SkillSourceKind,
@@ -50,6 +59,8 @@ export const LibraryObservation = Schema.Struct({
   lastUsedAt: Schema.NullOr(Schema.String),
   origin: Schema.NullOr(LibraryOrigin),
   updateStatus: SkillUpdateStatus,
+  instructionBytes: Schema.optional(Schema.Number),
+  discovery: Schema.optionalKey(SkillDiscoveryMetadata),
 });
 export type LibraryObservation = typeof LibraryObservation.Type;
 
@@ -66,6 +77,8 @@ export const LibraryLocation = Schema.Struct({
   lastUsedAt: Schema.NullOr(Schema.String),
   origin: Schema.NullOr(LibraryOrigin),
   updateStatus: SkillUpdateStatus,
+  instructionBytes: Schema.optional(Schema.Number),
+  discovery: Schema.optionalKey(SkillDiscoveryMetadata),
 });
 export type LibraryLocation = typeof LibraryLocation.Type;
 
@@ -85,6 +98,7 @@ export const LibrarySkill = Schema.Struct({
   lastModifiedAt: Schema.String,
   origins: Schema.Array(LibraryOrigin),
   updateStatus: SkillUpdateStatus,
+  instructionBytes: Schema.optional(Schema.Number),
 });
 export type LibrarySkill = typeof LibrarySkill.Type;
 

@@ -11,6 +11,7 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { format } from "node:util";
+import * as Schema from "effect/Schema";
 
 import { CANONICAL_LOG, getOrchestrateLockPath, TELEMETRY_LOG } from "@selftune/runtime/constants";
 import {
@@ -20,7 +21,11 @@ import {
   type CanonicalBaseInput,
   getLatestPromptIdentity,
 } from "@selftune/runtime/normalization";
-import type { SessionTelemetryRecord, StopPayload } from "@selftune/runtime/types";
+import {
+  CommonHookPayload,
+  type SessionTelemetryRecord,
+  type StopPayload,
+} from "@selftune/runtime/types";
 import { parseTranscript } from "@selftune/runtime/utils/transcript";
 
 import {
@@ -30,6 +35,7 @@ import {
 } from "./execution-result.js";
 
 const LOCK_STALE_MS = 30 * 60 * 1000;
+const OrchestrateLock = Schema.Struct({ timestamp: Schema.String });
 
 interface ReactiveSpawnDeps {
   spawnOrchestrate?: () => boolean;
@@ -38,8 +44,7 @@ interface ReactiveSpawnDeps {
 function hasFreshOrchestrateLock(lockPath: string): boolean {
   try {
     const lockContent = readFileSync(lockPath, "utf8");
-    const lock = JSON.parse(lockContent) as { timestamp?: string };
-    if (typeof lock.timestamp !== "string") return false;
+    const lock = Schema.decodeUnknownSync(Schema.fromJsonString(OrchestrateLock))(lockContent);
     const lockAge = Date.now() - new Date(lock.timestamp).getTime();
     return Number.isFinite(lockAge) && lockAge < LOCK_STALE_MS;
   } catch {
@@ -103,9 +108,9 @@ export async function processSessionStop(
   canonicalLogPath: string = CANONICAL_LOG,
   promptStatePath?: string,
 ): Promise<SessionTelemetryRecord> {
-  const sessionId = typeof payload.session_id === "string" ? payload.session_id : "unknown";
-  const transcriptPath = typeof payload.transcript_path === "string" ? payload.transcript_path : "";
-  const cwd = typeof payload.cwd === "string" ? payload.cwd : "";
+  const sessionId = payload.session_id ?? "unknown";
+  const transcriptPath = payload.transcript_path ?? "";
+  const cwd = payload.cwd ?? "";
 
   const metrics = parseTranscript(transcriptPath);
 
@@ -217,7 +222,7 @@ export async function processSessionStop(
 
 export async function runSessionStopHook(rawStdin: string): Promise<HookExecutionResult> {
   try {
-    const payload: StopPayload = JSON.parse(rawStdin);
+    const payload = Schema.decodeUnknownSync(Schema.fromJsonString(CommonHookPayload))(rawStdin);
     await processSessionStop(payload);
   } catch (err) {
     // silent — hooks must never block Claude

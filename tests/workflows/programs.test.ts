@@ -3,6 +3,7 @@ import type { Database } from "bun:sqlite";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import assert from "node:assert/strict";
 
 import * as Effect from "effect/Effect";
 
@@ -130,7 +131,7 @@ describe("workflow Effect program", () => {
       runWorkflowProgramWithDatabase({ operation: "discover", minOccurrences: 1 }, database),
     );
 
-    expect(result.operation).toBe("discover");
+    assert(result.operation === "discover");
     expect(result.value.workflows).toHaveLength(1);
     expect(formatWorkflowResult(result, false)).toContain("Research → Writing");
     expect(JSON.parse(formatWorkflowResult(result, true)).workflows).toHaveLength(1);
@@ -164,6 +165,8 @@ describe("workflow Effect program", () => {
     const saved = await Effect.runPromise(runWorkflowProgramWithDatabase(input, database));
     const unchanged = await Effect.runPromise(runWorkflowProgramWithDatabase(input, database));
 
+    assert(saved.operation === "save");
+    assert(unchanged.operation === "save");
     expect(saved.value.status).toBe("saved");
     expect(unchanged.value.status).toBe("unchanged");
     expect(readFileSync(skillPath, "utf-8")).toContain("## Workflows");
@@ -190,6 +193,7 @@ describe("workflow Effect program", () => {
       ),
     );
 
+    assert(result.operation === "scaffold");
     expect(result.value.written).toBe(false);
     expect(formatWorkflowResult(result, false)).toContain("Draft workflow skill:");
     expect(JSON.parse(formatWorkflowResult(result, true)).written).toBe(false);
@@ -207,6 +211,7 @@ describe("workflow Effect program", () => {
         database,
       ),
     );
+    assert(written.operation === "scaffold");
     expect(written.value.written).toBe(true);
     expect(formatWorkflowResult(written, false)).toContain("Scaffolded skill package");
 
@@ -224,7 +229,9 @@ describe("workflow Effect program", () => {
           database,
         ),
       ),
-    ).rejects.toEqual(expect.objectContaining<Partial<CLIError>>({ code: "FILE_EXISTS" }));
+    ).rejects.toEqual(
+      expect.objectContaining({ code: "FILE_EXISTS" } satisfies Pick<CLIError, "code">),
+    );
   });
 
   it("returns invalid numeric filters in the typed error channel", async () => {
@@ -234,7 +241,9 @@ describe("workflow Effect program", () => {
       Effect.runPromise(
         runWorkflowProgramWithDatabase({ operation: "discover", minOccurrences: -1 }, database),
       ),
-    ).rejects.toEqual(expect.objectContaining<Partial<CLIError>>({ code: "INVALID_FLAG" }));
+    ).rejects.toEqual(
+      expect.objectContaining({ code: "INVALID_FLAG" } satisfies Pick<CLIError, "code">),
+    );
   });
 
   it("keeps live database acquisition typed and owns only its connection", async () => {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { decodeFixtureResponse } from "./fixture-response.js";
 
 import { Effect, Layer, Schema } from "effect";
 
@@ -17,16 +18,16 @@ import { flushRegistryOutbox } from "../../packages/runtime/registry/registry-ou
 import type { RegistryStateEntry } from "../../packages/runtime/registry/registry-state.js";
 import { runRegistrySync } from "../../packages/runtime/registry/sync.js";
 
-function clientLayer(payload: unknown) {
+function clientLayer(payload: typeof Schema.Json.Type) {
   const service: RegistryClientService = {
     download: () => Effect.die(new Error("download was not expected")),
-    request: <A>(schema: Schema.Decoder<A>) => Schema.decodeUnknownEffect(schema)(payload),
+    request: <A>(schema: Schema.Decoder<A>) => decodeFixtureResponse(schema, payload),
   };
   return Layer.succeed(RegistryClient, service);
 }
 
 function recordingClientLayer(
-  payloads: ReadonlyArray<unknown>,
+  payloads: ReadonlyArray<typeof Schema.Json.Type>,
   requests: RegistryRequestOptions[],
   download = Effect.succeed(new Uint8Array()),
 ) {
@@ -35,7 +36,7 @@ function recordingClientLayer(
     download: () => download,
     request: <A>(schema: Schema.Decoder<A>, options: RegistryRequestOptions) => {
       requests.push(options);
-      return Schema.decodeUnknownEffect(schema)(payloads[index++]);
+      return decodeFixtureResponse(schema, payloads[index++]);
     },
   };
   return Layer.succeed(RegistryClient, service);
@@ -61,6 +62,14 @@ const unusedPlatform: RegistryPlatformService = {
 };
 
 describe("runRegistryProgram", () => {
+  test("represents malformed fixture responses with the client decode-error contract", async () => {
+    const error = await Effect.runPromise(
+      decodeFixtureResponse(Schema.Struct({ id: Schema.String }), { id: 1 }).pipe(Effect.flip),
+    );
+    expect(error).toMatchObject({ _tag: "RegistryResponseDecodeError", status: 200 });
+    expect(error.message).toContain("id");
+  });
+
   test("runs list against an injected typed client without ambient config or fetch", async () => {
     const result = await Effect.runPromise(
       runRegistryProgram({ operation: "list" }).pipe(
@@ -799,7 +808,8 @@ describe("runRegistryProgram", () => {
             RegistryHttpError.make({ status: 503, message: "temporarily offline" }),
           );
         }
-        return Schema.decodeUnknownEffect(schema)(
+        return decodeFixtureResponse(
+          schema,
           options.path.endsWith("/install") ? { data: { id: "installation-1" } } : {},
         );
       },

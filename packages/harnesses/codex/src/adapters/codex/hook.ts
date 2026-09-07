@@ -21,6 +21,8 @@
  * Fail-open: any unhandled error -> exit 0, never crash the host agent.
  */
 
+import { Schema } from "effect";
+import { CommonHookPayload, BaseToolUsePayload } from "@selftune/runtime/types";
 import type {
   PostToolUsePayload,
   PreToolUsePayload,
@@ -33,25 +35,23 @@ import type {
 // ---------------------------------------------------------------------------
 
 /** Codex hook payload — superset of all event fields. */
-export interface CodexHookPayload {
-  hook_event_name?: string;
-  session_id?: string;
-  transcript_path?: string;
-  cwd?: string;
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
-  tool_use_id?: string;
-  tool_response?: Record<string, unknown>;
-  prompt?: string;
-  user_prompt?: string;
-  permission_mode?: string;
-  stop_hook_active?: boolean;
-  last_assistant_message?: string;
-  [key: string]: unknown;
-}
+export const CodexHookPayload = Schema.Struct({
+  ...CommonHookPayload.fields,
+  tool_name: Schema.optionalKey(BaseToolUsePayload.fields.tool_name),
+  tool_input: Schema.optionalKey(BaseToolUsePayload.fields.tool_input),
+  tool_use_id: BaseToolUsePayload.fields.tool_use_id,
+  tool_response: Schema.optionalKey(BaseToolUsePayload.fields.tool_input),
+  prompt: Schema.optionalKey(Schema.String),
+  user_prompt: Schema.optionalKey(Schema.String),
+  stop_hook_active: Schema.optionalKey(Schema.Boolean),
+  last_assistant_message: Schema.optionalKey(Schema.String),
+});
+export type CodexHookPayload = typeof CodexHookPayload.Type;
 
 /** Response written to stdout. Empty object = no-op. */
-type HookResponse = Record<string, unknown>;
+interface HookResponse {
+  hookSpecificOutput?: { hookEventName: "SessionStart"; additionalContext: string };
+}
 
 const EMPTY_RESPONSE: HookResponse = {};
 
@@ -115,9 +115,7 @@ export async function handlePreToolUse(
   };
 
   // Import constants once for both guards
-  let constants:
-    | { EVOLUTION_AUDIT_LOG: string; SELFTUNE_CONFIG_DIR: string; SESSION_STATE_DIR: string }
-    | undefined;
+  let constants: typeof import("@selftune/runtime/constants") | undefined;
   try {
     constants = await import("@selftune/runtime/constants");
   } catch {
@@ -219,10 +217,7 @@ async function handleStop(payload: CodexHookPayload): Promise<HookResponse> {
       cwd: payload.cwd,
       permission_mode: payload.permission_mode,
       stop_hook_active: payload.stop_hook_active,
-      last_assistant_message:
-        typeof payload.last_assistant_message === "string"
-          ? payload.last_assistant_message
-          : undefined,
+      last_assistant_message: payload.last_assistant_message,
       hook_event_name: "Stop",
     };
     await processSessionStop(stopPayload);
@@ -250,8 +245,7 @@ export async function cliMain(): Promise<void> {
   let exitCode = 0;
 
   try {
-    const { readStdinWithPreview } = await import("@selftune/harness-core/stdin-preview");
-    const { full } = await readStdinWithPreview();
+    const full = await Bun.stdin.text();
 
     // Fast-path: empty stdin -> no-op
     if (!full.trim()) {
@@ -261,15 +255,14 @@ export async function cliMain(): Promise<void> {
 
     let payload: CodexHookPayload;
     try {
-      payload = JSON.parse(full) as CodexHookPayload;
+      payload = Schema.decodeUnknownSync(Schema.fromJsonString(CodexHookPayload))(full);
     } catch {
       writeResponseAndExit(EMPTY_RESPONSE, 0);
       return;
     }
 
-    const eventName = typeof payload.hook_event_name === "string" ? payload.hook_event_name : "";
+    const eventName = payload.hook_event_name ?? "";
 
-    // Fast-path: use preview to skip irrelevant events without full routing
     if (!eventName) {
       writeResponseAndExit(EMPTY_RESPONSE, 0);
       return;

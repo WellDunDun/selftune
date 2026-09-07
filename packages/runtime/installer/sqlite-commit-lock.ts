@@ -54,11 +54,11 @@ export function makeSqliteInstallerExclusiveCommitLock(
         const timestamp = now();
         const token = randomUUID();
         const row = db
-          .query(
+          .query<LeaseRow, [string]>(
             `SELECT owner_token, generation, lease_expires_at
            FROM skill_install_commit_locks WHERE lock_name = ? LIMIT 1`,
           )
-          .get(LOCK_NAME) as LeaseRow | null;
+          .get(LOCK_NAME);
         if (!row) {
           db.query(
             `INSERT INTO skill_install_commit_locks

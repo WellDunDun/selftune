@@ -60,11 +60,6 @@ function config(dataDir: string): SelfHostConfig {
   };
 }
 
-function field(value: unknown, key: string): unknown {
-  if (typeof value !== "object" || value === null || !(key in value)) return undefined;
-  return Reflect.get(value, key);
-}
-
 function sha256(bytes: Uint8Array | string): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -89,13 +84,12 @@ async function apiRequest(
   init: RequestInit = {},
   token = ADMIN_TOKEN,
 ): Promise<Response> {
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${token}`);
   const response = await handle.handle(
     new Request(`http://selftune.internal${path}`, {
       ...init,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...init.headers,
-      },
+      headers,
     }),
   );
   if (!response) throw new TypeError(`Self-host API did not handle ${path}.`);
@@ -124,7 +118,7 @@ async function putObject(
   return objectSha256;
 }
 
-function createHandle(): { readonly config: SelfHostConfig; readonly handle: RemoteApiHandle } {
+function createHandle() {
   const dataDir = mkdtempSync(join(tmpdir(), "selftune-remote-dashboard-"));
   temporaryDirectories.push(dataDir);
   const hostConfig = config(dataDir);
@@ -134,6 +128,51 @@ function createHandle(): { readonly config: SelfHostConfig; readonly handle: Rem
 }
 
 describe("self-hosted remote dashboard read model", () => {
+  test.each(["not JSON", '{"snapshot":{"id":42}}'])(
+    "rejects malformed snapshot responses: %s",
+    async (body) => {
+      const loaders = makeRemoteDashboardLoaders(config("unused"), {
+        handle: async () => new Response(body),
+        dispose: async () => {},
+        ready: Promise.resolve(),
+      });
+      await expect(loaders.libraryLoader()).rejects.toMatchObject({
+        operation: "decode_head",
+        status: 502,
+      });
+    },
+  );
+  test.each(["not JSON", '{"schema_version":1,"skills":42}'])(
+    "rejects malformed stored Skill Set bytes: %s",
+    async (body) => {
+      const { config: hostConfig, handle } = createHandle();
+      const objectSha256 = await putObject(handle, new TextEncoder().encode(body));
+      const commit = await apiRequest(handle, "/api/v1/remote-library/snapshots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schema_version: "selftune.remote-library.snapshot.v1",
+          expected_parent_id: null,
+          artifacts: [
+            {
+              artifact_id: "skill-set/broken/v1",
+              artifact_type: "skill_set",
+              object_sha256: objectSha256,
+              revision: sha256("broken-v1"),
+              metadata: {},
+            },
+          ],
+        }),
+      });
+      expect(commit.status).toBe(201);
+      await expect(
+        makeRemoteDashboardLoaders(hostConfig, handle).skillSetsLoader(),
+      ).rejects.toMatchObject({
+        operation: "decode_skill_set",
+        status: 422,
+      });
+    },
+  );
   test("returns canonical empty Library and Skill Set views before the first backup", async () => {
     const { config: hostConfig, handle } = createHandle();
     const hiddenBytes = packageBytes("other-org-skill");
@@ -213,14 +252,14 @@ describe("self-hosted remote dashboard read model", () => {
             artifact_type: "skill_revision",
             object_sha256: releasedObject,
             revision: releasedRevision,
-            metadata: { updated_at: "2026-07-13T10:00:00.000Z" },
+            metadata: { skill_name: 42, updated_at: "2026-07-13T10:00:00.000Z" },
           },
           {
             artifact_id: `draft/science-workflow/${draftRevision}`,
             artifact_type: "draft_revision",
             object_sha256: draftObject,
             revision: draftRevision,
-            metadata: { updated_at: "2026-07-14T09:00:00.000Z" },
+            metadata: { skill_name: "  ", updated_at: "2026-07-14T09:00:00.000Z" },
           },
           {
             artifact_id: `draft/draft-only/${draftOnlyRevision}`,
@@ -287,11 +326,11 @@ describe("self-hosted remote dashboard read model", () => {
 
     const libraryResponse = await fetch(`${baseUrl}/api/v2/library`, { headers });
     expect(libraryResponse.status).toBe(200);
-    expect(field(await libraryResponse.json(), "counts")).toEqual(library.counts);
+    expect(await libraryResponse.json()).toMatchObject({ counts: library.counts });
 
     const skillSetsResponse = await fetch(`${baseUrl}/api/v2/skill-sets`, { headers });
     expect(skillSetsResponse.status).toBe(200);
-    expect(field(await skillSetsResponse.json(), "sets")).toHaveLength(1);
+    expect(await skillSetsResponse.json()).toMatchObject({ sets: skillSets.sets });
 
     const readOnlyMutation = await fetch(`${baseUrl}/api/v2/skill-sets`, {
       method: "POST",
@@ -304,6 +343,6 @@ describe("self-hosted remote dashboard read model", () => {
     });
     expect(readOnlyMutation.status).toBe(405);
     expect(readOnlyMutation.headers.get("allow")).toBe("GET");
-    expect(field(field(await readOnlyMutation.json(), "error"), "code")).toBe("READ_ONLY_HOST");
+    expect(await readOnlyMutation.json()).toMatchObject({ error: { code: "READ_ONLY_HOST" } });
   });
 });

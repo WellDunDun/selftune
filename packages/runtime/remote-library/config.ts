@@ -230,12 +230,7 @@ export function saveRemoteLibraryConfig(
 export function remoteLibrarySettings(
   configRoot = SELFTUNE_CONFIG_DIR,
   deps: RemoteLibraryConfigDeps = {},
-): {
-  configured: boolean;
-  credential_provider: RemoteLibraryConfig["credentialProvider"] | null;
-  url: string | null;
-  preferences: SyncPreferences;
-} {
+) {
   try {
     const config = loadRemoteLibraryConfig(configRoot, deps);
     return {

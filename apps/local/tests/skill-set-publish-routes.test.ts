@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import type { Json } from "effect/Schema";
 
 import { DashboardOperations, makeDashboardOperationsLayer } from "../src/dashboard-operations.js";
 import { handleDashboardApplicationRoute } from "../src/routes/application.js";
@@ -34,9 +35,9 @@ const dependencyLock = {
 };
 
 function routeRequest(
-  runtime: ManagedRuntime.ManagedRuntime<DashboardOperations>,
+  runtime: ManagedRuntime.ManagedRuntime<DashboardOperations, never>,
   path: string,
-  body: unknown,
+  body: Json,
 ) {
   const request = new Request(`${origin}${path}`, {
     method: "POST",
@@ -61,6 +62,7 @@ describe("Skill Set publish application routes", () => {
       skillSetRevisionSha256: revisionSha256,
       envelopeSha256,
       byteLength: 1_024,
+      dependencyInput: dependencyResolution,
       contents: [{ name: "review", revisionSha256, license: "MIT" }],
       dependencies: {
         lock: dependencyLock,

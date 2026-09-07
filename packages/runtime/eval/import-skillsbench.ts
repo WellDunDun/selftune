@@ -12,10 +12,22 @@
 
 import { existsSync, readdirSync, readFileSync, type Dirent, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { Schema } from "effect";
 
 import type { EvalEntry, SkillsBenchTask } from "../types.js";
 import { CLIError } from "../utils/cli-error.js";
 import type { EvalImportInput } from "./cli-contract.js";
+import { optionalEvidence } from "../utils/transcript-contract.js";
+
+const decodeMetadata = Schema.decodeUnknownSync(
+  Schema.Struct({
+    category: optionalEvidence(Schema.String),
+    difficulty: optionalEvidence(Schema.Literals(["easy", "medium", "hard"])),
+    expected_skill: optionalEvidence(Schema.String),
+    expected_tools: optionalEvidence(Schema.mutable(Schema.Array(Schema.String))),
+    tags: optionalEvidence(Schema.mutable(Schema.Array(Schema.String))),
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // Minimal TOML parser (handles the subset used by SkillsBench task.toml files)
@@ -30,8 +42,8 @@ import type { EvalImportInput } from "./cli-contract.js";
  * Does NOT support: multi-line / triple-quoted strings, inline tables,
  * nested arrays, or section headers ([table]).
  */
-function parseSimpleToml(content: string): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
+function parseSimpleToml(content: string) {
+  const result = new Map<string, string | string[]>();
   for (const rawLine of content.split("\n")) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
@@ -50,16 +62,16 @@ function parseSimpleToml(content: string): Record<string, unknown> {
         const trimmed = item.trim().replace(/^["']|["']$/g, "");
         if (trimmed) items.push(trimmed);
       }
-      result[key] = items;
+      result.set(key, items);
     } else if (rawValue.startsWith('"') || rawValue.startsWith("'")) {
       // String value
-      result[key] = rawValue.replace(/^["']|["']$/g, "");
+      result.set(key, rawValue.replace(/^["']|["']$/g, ""));
     } else {
       // Bare value (number, boolean, etc.)
-      result[key] = rawValue;
+      result.set(key, rawValue);
     }
   }
-  return result;
+  return decodeMetadata(Object.fromEntries(result));
 }
 
 // ---------------------------------------------------------------------------
@@ -92,29 +104,23 @@ export function parseSkillsBenchDir(dirPath: string): SkillsBenchTask[] {
 
     // Parse optional task.toml
     const tomlPath = join(taskDir, "task.toml");
-    let metadata: Record<string, unknown> = {};
-    if (existsSync(tomlPath)) {
-      metadata = parseSimpleToml(readFileSync(tomlPath, "utf-8"));
-    }
-
-    const difficulty = metadata.difficulty as SkillsBenchTask["difficulty"] | undefined;
+    const metadata = parseSimpleToml(existsSync(tomlPath) ? readFileSync(tomlPath, "utf-8") : "");
 
     const task: SkillsBenchTask = {
       task_id: entry.name,
-      category: (metadata.category as string) ?? "general",
+      category: metadata.category ?? "general",
       query,
-      difficulty:
-        difficulty && ["easy", "medium", "hard"].includes(difficulty) ? difficulty : "medium",
+      difficulty: metadata.difficulty ?? "medium",
     };
 
     if (metadata.expected_skill) {
-      task.expected_skill = metadata.expected_skill as string;
+      task.expected_skill = metadata.expected_skill;
     }
-    if (metadata.expected_tools && Array.isArray(metadata.expected_tools)) {
-      task.expected_tools = metadata.expected_tools as string[];
+    if (metadata.expected_tools) {
+      task.expected_tools = metadata.expected_tools;
     }
-    if (metadata.tags && Array.isArray(metadata.tags)) {
-      task.tags = metadata.tags as string[];
+    if (metadata.tags) {
+      task.tags = metadata.tags;
     }
 
     tasks.push(task);
@@ -142,9 +148,9 @@ export function convertToEvalEntries(
     } else {
       // Fuzzy: check if targetSkill appears as substring in category, tags, or expected_skill
       const skillLower = targetSkill.toLowerCase();
-      const searchable = [task.category, task.expected_skill, ...(task.tags ?? [])]
-        .filter(Boolean)
-        .map((s) => (s as string).toLowerCase());
+      const searchable = [task.category, task.expected_skill, ...(task.tags ?? [])].flatMap(
+        (value) => (value ? [value.toLowerCase()] : []),
+      );
 
       matches = searchable.some((s) => s.includes(skillLower) || skillLower.includes(s));
     }

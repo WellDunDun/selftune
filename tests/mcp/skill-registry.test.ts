@@ -1,18 +1,30 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Schema } from "effect";
 
 import {
   handleSkillRegistryRequest,
+  handleSkillRegistryLine,
   LocalSkillRegistry,
+  McpSkillEntry,
   parseSkillFrontmatter,
 } from "../../packages/runtime/mcp/skill-registry.js";
 
-const root = join(import.meta.dir, ".tmp-skill-registry");
+let root: string;
+const decodeList = Schema.decodeUnknownSync(Schema.Struct({ skills: Schema.Array(McpSkillEntry) }));
+const decodeSearch = Schema.decodeUnknownSync(
+  Schema.Struct({
+    structuredContent: Schema.Struct({
+      results: Schema.Array(Schema.Struct({ uri: Schema.String })),
+    }),
+  }),
+);
 
 describe("MCP skill registry", () => {
   beforeEach(() => {
-    rmSync(root, { recursive: true, force: true });
+    root = mkdtempSync(join(tmpdir(), "selftune-mcp-registry-"));
     mkdirSync(join(root, "research", "references"), { recursive: true });
     writeFileSync(
       join(root, "research", "SKILL.md"),
@@ -43,7 +55,7 @@ describe("MCP skill registry", () => {
       method: "skills/list",
       params: {},
     });
-    const result = listed?.result as { skills: McpListedSkill[] };
+    const result = decodeList(listed?.result);
     expect(result.skills).toHaveLength(1);
     const skill = result.skills[0];
     expect(skill.uri).toMatch(/^skill:\/\/selftune\/[a-f0-9]{64}\/research\/SKILL\.md$/);
@@ -91,7 +103,7 @@ describe("MCP skill registry", () => {
       method: "tools/call",
       params: { name: "search_skills", arguments: { query: "primary source investigation" } },
     });
-    const found = search?.result as { structuredContent: { results: Array<{ uri: string }> } };
+    const found = decodeSearch(search?.result);
     expect(found.structuredContent.results).toHaveLength(1);
     const load = handleSkillRegistryRequest(registry, {
       id: 2,
@@ -111,10 +123,91 @@ describe("MCP skill registry", () => {
     const registry = new LocalSkillRegistry({ searchDirs: [root] });
     expect(registry.list().skills).toEqual([]);
   });
-});
 
-interface McpListedSkill {
-  uri: string;
-  frontmatter: Record<string, unknown>;
-  resources: Array<{ uri: string; digest: string }>;
-}
+  test("distinguishes invalid JSON, invalid envelopes, and notifications", () => {
+    const registry = new LocalSkillRegistry({ searchDirs: [root] });
+    expect(handleSkillRegistryLine(registry, "{broken")?.error?.code).toBe(-32700);
+    for (const line of [
+      "null",
+      "[]",
+      "42",
+      '{"id":1}',
+      '{"id":{},"method":"ping"}',
+      '{"jsonrpc":"1.0","id":1,"method":"ping"}',
+    ]) {
+      expect(handleSkillRegistryLine(registry, line)?.error?.code).toBe(-32600);
+    }
+    expect(
+      handleSkillRegistryLine(registry, '{"method":"notifications/initialized"}'),
+    ).toBeUndefined();
+    expect(handleSkillRegistryLine(registry, '{"jsonrpc":"2.0","id":1,"method":"ping"}')).toEqual({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {},
+    });
+  });
+
+  test("rejects malformed search arguments without crashing the request stream", () => {
+    const registry = new LocalSkillRegistry({ searchDirs: [root] });
+    for (const args of [
+      { query: 42 },
+      { query: "   " },
+      { query: "research", limit: "5" },
+      { query: "research", limit: 1.5 },
+      { query: "research", limit: 0 },
+      { query: "research", limit: 21 },
+    ]) {
+      const response = handleSkillRegistryLine(
+        registry,
+        JSON.stringify({
+          id: "search",
+          method: "tools/call",
+          params: { name: "search_skills", arguments: args },
+        }),
+      );
+      expect(response?.error?.code).toBe(-32602);
+    }
+    const response = handleSkillRegistryLine(
+      registry,
+      JSON.stringify({
+        id: "valid",
+        method: "tools/call",
+        params: { name: "search_skills", arguments: { query: "research", limit: 1 } },
+      }),
+    );
+    expect(decodeSearch(response?.result).structuredContent.results).toHaveLength(1);
+  });
+
+  test("processes malformed stdin and a final request without a trailing newline", async () => {
+    const modulePath = join(import.meta.dir, "../../packages/runtime/mcp/skill-registry.ts");
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "--eval",
+        `import { runSkillRegistryStdio } from ${JSON.stringify(modulePath)}; await runSkillRegistryStdio({ searchDirs: [${JSON.stringify(root)}] });`,
+      ],
+      { stdin: "pipe", stdout: "pipe", stderr: "pipe" },
+    );
+    child.stdin.write(
+      '{broken\nnull\n{"method":"notifications/initialized"}\n{"id":7,"method":"ping"}',
+    );
+    child.stdin.end();
+    const [output, errors, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    expect(exitCode).toBe(0);
+    expect(errors).toBe("");
+    const parse = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
+    const responses = output
+      .trim()
+      .split("\n")
+      .map((line) => parse(line));
+    expect(responses).toEqual([
+      { jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } },
+      { jsonrpc: "2.0", id: null, error: { code: -32600, message: "Invalid request" } },
+      { jsonrpc: "2.0", id: 7, result: {} },
+    ]);
+  });
+});

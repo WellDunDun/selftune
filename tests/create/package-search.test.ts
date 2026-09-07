@@ -1,3 +1,6 @@
+import assert from "node:assert/strict";
+import type { CreatePackageEvaluationResult } from "../../packages/runtime/create/package-evaluator.js";
+import { summarizeReplayRuntimeMetrics } from "../../packages/runtime/create/replay.js";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -100,7 +103,7 @@ function makeEvaluation(
   const skillPath = options.skillPath ?? `/tmp/${skillName}/SKILL.md`;
   const replayPassRate = options.replayPassRate ?? 1;
   const baselineLift = options.baselineLift ?? 0.1;
-  return {
+  const evaluation: CreatePackageEvaluationResult = {
     summary: {
       skill_name: skillName,
       skill_path: skillPath,
@@ -170,6 +173,7 @@ function makeEvaluation(
       pass_rate: replayPassRate,
       fixture_id: "fixture-root",
       results: [],
+      runtime_metrics: summarizeReplayRuntimeMetrics([]),
     },
     baseline: {
       skill_name: skillName,
@@ -182,9 +186,19 @@ function makeEvaluation(
       measured_at: "2026-04-15T09:00:00.000Z",
     },
   };
+  return evaluation;
 }
 
 describe("search run persistence", () => {
+  test.each(["null", "{}", '{"frontier_size":"two"}'])(
+    "rejects malformed persisted provenance: %s",
+    (provenance) => {
+      insertSearchRun(db, makeSearchRun());
+      db.query("UPDATE package_search_runs SET provenance_json = ?").run(provenance);
+      expect(() => readSearchRuns(db, "test-skill")).toThrow();
+    },
+  );
+
   test("insertSearchRun + readSearchRuns roundtrip", () => {
     const run = makeSearchRun({
       search_id: "sr-001",
@@ -338,8 +352,10 @@ describe("runPackageSearch", () => {
           pass_rate: replayByPath.get(skillPath) ?? 1,
           fixture_id: `fixture-${mode}`,
           results: [],
+          runtime_metrics: summarizeReplayRuntimeMetrics([]),
         }),
         runCreateBaseline: async ({ skillPath, mode, withSkillReplayResult }) => {
+          assert.ok(withSkillReplayResult);
           const lift = liftByPath.get(skillPath) ?? 0.1;
           return {
             skill_name: "ignored-temp-name",
@@ -351,18 +367,7 @@ describe("runPackageSearch", () => {
             per_entry: [],
             measured_at: "2026-04-15T09:00:00.000Z",
             runtime_metrics: {
-              with_skill: withSkillReplayResult.runtime_metrics ?? {
-                eval_runs: 0,
-                usage_observations: 0,
-                total_duration_ms: 0,
-                avg_duration_ms: 0,
-                total_input_tokens: null,
-                total_output_tokens: null,
-                total_cache_creation_input_tokens: null,
-                total_cache_read_input_tokens: null,
-                total_cost_usd: null,
-                total_turns: null,
-              },
+              with_skill: withSkillReplayResult.runtime_metrics,
               without_skill: {
                 eval_runs: 0,
                 usage_observations: 0,
@@ -418,6 +423,7 @@ describe("runPackageSearch", () => {
           pass_rate: 1,
           fixture_id: `fixture-${mode}`,
           results: [],
+          runtime_metrics: summarizeReplayRuntimeMetrics([]),
         }),
         runCreateBaseline: async ({ mode }) => ({
           skill_name: "ignored-temp-name",
@@ -496,9 +502,11 @@ describe("runPackageSearch", () => {
             pass_rate: replayByPath.get(skillPath) ?? 1,
             fixture_id: `fixture-${mode}`,
             results: [],
+            runtime_metrics: summarizeReplayRuntimeMetrics([]),
           };
         },
         runCreateBaseline: async ({ skillPath, mode, withSkillReplayResult }) => {
+          assert.ok(withSkillReplayResult);
           const lift = liftByPath.get(skillPath) ?? 0.48;
           return {
             skill_name: "ignored-temp-name",
@@ -510,18 +518,7 @@ describe("runPackageSearch", () => {
             per_entry: [],
             measured_at: "2026-04-15T09:00:00.000Z",
             runtime_metrics: {
-              with_skill: withSkillReplayResult.runtime_metrics ?? {
-                eval_runs: 0,
-                usage_observations: 0,
-                total_duration_ms: 0,
-                avg_duration_ms: 0,
-                total_input_tokens: null,
-                total_output_tokens: null,
-                total_cache_creation_input_tokens: null,
-                total_cache_read_input_tokens: null,
-                total_cost_usd: null,
-                total_turns: null,
-              },
+              with_skill: withSkillReplayResult.runtime_metrics,
               without_skill: {
                 eval_runs: 0,
                 usage_observations: 0,

@@ -190,7 +190,7 @@ describe("extractFailurePatterns", () => {
     expect(p.missed_queries).toEqual(["run tests"]);
     expect(p.frequency).toBe(1);
     expect(p.sample_sessions).toEqual([]);
-    expect(typeof p.extracted_at).toBe("string");
+    expect(p.extracted_at).toBeString();
     // Verify it's a valid ISO date
     expect(Number.isNaN(Date.parse(p.extracted_at))).toBe(false);
   });

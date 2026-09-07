@@ -4,6 +4,10 @@
 
 Install and configure selftune hooks for non-Claude-Code platforms (Codex, OpenCode, Cline, Pi).
 
+Claude Code hook setup runs through initialization. Invalid Claude settings are
+left unchanged; repair the reported file before retrying initialization. Existing
+custom settings and unrelated hooks are retained.
+
 ## When to Use
 
 - User wants selftune on Codex, OpenCode, Cline, or Pi
@@ -69,6 +73,8 @@ of assigning the current installed version to a historical invocation.
 - Events: tool.execute.before, tool.execute.after, session.idle (via event handler)
 - Install writes a TypeScript plugin file (`selftune-opencode-plugin.ts`) into the plugins directory (auto-discovered by OpenCode at startup)
 - Agents are registered in the `agent` config key (identified by `[selftune]` description prefix)
+- Historical backfills use `selftune ingest opencode`; source-message validation
+  preserves valid evidence without modifying the OpenCode database or JSON files.
 - Write/Edit before/after events share the hash-only `SKILL.md` revision capture when the platform exposes the target and result.
 
 ### Cline

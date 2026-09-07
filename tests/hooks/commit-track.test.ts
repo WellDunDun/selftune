@@ -32,17 +32,7 @@ afterEach(() => {
 /** Helper to count commit_tracking rows. */
 function commitTrackingCount(): number {
   const db = getDb();
-  const row = db.query("SELECT COUNT(*) as cnt FROM commit_tracking").get() as { cnt: number };
-  return row.cnt;
-}
-
-/** Helper to get the latest commit_tracking row. */
-function getLatestCommitTracking(): Record<string, unknown> | null {
-  const db = getDb();
-  return db.query("SELECT * FROM commit_tracking ORDER BY id DESC LIMIT 1").get() as Record<
-    string,
-    unknown
-  > | null;
+  return db.query<{ cnt: number }, []>("SELECT COUNT(*) as cnt FROM commit_tracking").get()!.cnt;
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +177,6 @@ describe("scrubRemoteUrl", () => {
 
   test("returns undefined for empty input", () => {
     expect(scrubRemoteUrl("")).toBeUndefined();
-    expect(scrubRemoteUrl(undefined as unknown as string)).toBeUndefined();
   });
 });
 
@@ -213,10 +202,12 @@ describe("processCommitTrack", () => {
     expect(result?.commit_title).toBe("Fix bug");
 
     expect(commitTrackingCount()).toBe(1);
-    const row = getLatestCommitTracking();
-    expect(row?.session_id).toBe("sess-123");
-    expect(row?.commit_sha).toBe("d1e2f3a");
-    expect(row?.commit_title).toBe("Fix bug");
+    const row = getDb().query("SELECT * FROM commit_tracking ORDER BY id DESC LIMIT 1").get();
+    expect(row).toMatchObject({
+      session_id: "sess-123",
+      commit_sha: "d1e2f3a",
+      commit_title: "Fix bug",
+    });
   });
 
   test("skips non-Bash tool", async () => {

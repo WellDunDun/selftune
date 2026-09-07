@@ -10,7 +10,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 
-import { Database as ReadonlyDatabase } from "bun:sqlite";
+import { Database as ReadonlyDatabase, type SQLQueryBindings } from "bun:sqlite";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { openDb } from "@selftune/local-store";
 import { DuckDbAnalyticalStore, LocalTraceImporter } from "@selftune/observability";
@@ -24,6 +24,7 @@ import { runHistoricalBackfill } from "@selftune/orchestration/historical-backfi
 import { makeLocalTraceImporterLive } from "@selftune/orchestration/sync/local-trace-importer";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 
 type LocalDatabase = ReturnType<typeof openDb>;
 
@@ -35,28 +36,25 @@ const argument = (name: string) => {
   return index < 0 ? undefined : process.argv[index + 1];
 };
 
-const queryCount = (database: LocalDatabase, sql: string, parameters: unknown[] = []) =>
-  Number((database.query(sql).get(...parameters) as { count: number }).count);
-
-const responseBytes = (value: unknown) =>
-  new TextEncoder().encode(JSON.stringify(value)).byteLength;
+const queryCount = (database: LocalDatabase, sql: string, parameters: SQLQueryBindings[] = []) => {
+  const row = database.query<{ count: number }, SQLQueryBindings[]>(sql).get(...parameters);
+  if (row === null) throw new Error("Count query returned no row.");
+  return row.count;
+};
 
 const quotedIdentifier = (name: string) => `"${name.replaceAll('"', '""')}"`;
 
 const duplicateFactsToTenTimes = (database: LocalDatabase) => {
-  const columns = database.query("PRAGMA table_info(execution_facts)").all() as { name: string }[];
+  const columns = database.query<{ name: string }, []>("PRAGMA table_info(execution_facts)").all();
   const names = columns.map(({ name }) => name).filter((name) => name !== "id");
   const select = names
     .map((name) =>
       name === "execution_fact_id" || name === "prompt_id" ? "NULL" : quotedIdentifier(name),
     )
     .join(", ");
-  const originalMaxId = Number(
-    (
-      database.query("SELECT COALESCE(MAX(id), 0) AS max_id FROM execution_facts").get() as {
-        max_id: number;
-      }
-    ).max_id,
+  const originalMaxId = queryCount(
+    database,
+    "SELECT COALESCE(MAX(id), 0) AS count FROM execution_facts",
   );
   const target = names.map(quotedIdentifier).join(", ");
   for (let index = 0; index < 9; index += 1) {
@@ -69,14 +67,23 @@ const duplicateFactsToTenTimes = (database: LocalDatabase) => {
 
 const platformCounts = (database: LocalDatabase) =>
   Object.fromEntries(
-    (
-      database
-        .query(
-          "SELECT platform, COUNT(*) AS count FROM sessions GROUP BY platform ORDER BY platform",
-        )
-        .all() as { platform: string | null; count: number }[]
-    ).map((row) => [row.platform ?? "unknown", Number(row.count)]),
+    database
+      .query<{ platform: string | null; count: number }, []>(
+        "SELECT platform, COUNT(*) AS count FROM sessions GROUP BY platform ORDER BY platform",
+      )
+      .all()
+      .map((row) => [row.platform ?? "unknown", row.count]),
   );
+
+const Count = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
+const CanonicalIdEvidence = Schema.Struct({
+  session_spans: Count,
+  prompt_logs: Count,
+  invocation_logs: Count,
+  execution_logs: Count,
+  metric_points: Count,
+  log_skill_links: Count,
+});
 
 const inspectAnalyticalEvidence = async (database: LocalDatabase, path: string) => {
   const instance = await DuckDBInstance.create(path);
@@ -107,11 +114,12 @@ const inspectAnalyticalEvidence = async (database: LocalDatabase, path: string) 
           AS metric_points,
         CAST((SELECT COUNT(*) FROM observability_historical_log_skill_links
           WHERE skill_invocation_id <> '') AS DOUBLE) AS log_skill_links`)
-      .then(async (result) => (await result.getRowObjects())[0] as Record<string, number>);
+      .then(async (result) =>
+        Schema.decodeUnknownSync(CanonicalIdEvidence)((await result.getRowObjects())[0]),
+      );
     const compatibility = makeCompatibilitySqliteTraceEvidenceReader(
       {
-        query: (sql, parameters) =>
-          database.query(sql).all(parameters) as Record<string, unknown>[],
+        query: (sql, parameters) => database.query(sql).all(parameters),
       },
       "current",
     );
@@ -127,39 +135,45 @@ const inspectAnalyticalEvidence = async (database: LocalDatabase, path: string) 
   }
 };
 
-const metricColumns = {
-  duration_ms: "duration_ms",
-  input_tokens: "input_tokens",
-  output_tokens: "output_tokens",
-  tool_call_count: "total_tool_calls",
-  error_count: "errors_encountered",
-  assistant_turns: "assistant_turns",
-  files_changed: "files_changed",
-  lines_added: "lines_added",
-  lines_removed: "lines_removed",
-  lines_modified: "lines_modified",
-  cached_input_tokens: "cached_input_tokens",
-  reasoning_output_tokens: "reasoning_output_tokens",
-  cost_usd: "cost_usd",
-  artifact_count: "artifact_count",
-} as const;
+const metricColumns = new Map(
+  Object.entries({
+    duration_ms: "duration_ms",
+    input_tokens: "input_tokens",
+    output_tokens: "output_tokens",
+    tool_call_count: "total_tool_calls",
+    error_count: "errors_encountered",
+    assistant_turns: "assistant_turns",
+    files_changed: "files_changed",
+    lines_added: "lines_added",
+    lines_removed: "lines_removed",
+    lines_modified: "lines_modified",
+    cached_input_tokens: "cached_input_tokens",
+    reasoning_output_tokens: "reasoning_output_tokens",
+    cost_usd: "cost_usd",
+    artifact_count: "artifact_count",
+  }),
+);
 
 const rollupsMatchCanonicalSource = (
   database: LocalDatabase,
   rollups: ReadonlyArray<{ source_id: string; metric_name: string; value: number }>,
 ) =>
   rollups.every((rollup) => {
-    const column = metricColumns[rollup.metric_name as keyof typeof metricColumns];
+    const column = metricColumns.get(rollup.metric_name);
     if (column === undefined || !rollup.source_id.startsWith("execution_fact:")) return false;
     const identity = rollup.source_id.slice("execution_fact:".length);
     const row = identity.startsWith("legacy-")
       ? database
-          .query(`SELECT "${column}" AS value FROM execution_facts WHERE id = ?`)
+          .query<{ value: number | null }, [number]>(
+            `SELECT "${column}" AS value FROM execution_facts WHERE id = ?`,
+          )
           .get(Number(identity.slice("legacy-".length)))
       : database
-          .query(`SELECT "${column}" AS value FROM execution_facts WHERE execution_fact_id = ?`)
+          .query<{ value: number | null }, [string]>(
+            `SELECT "${column}" AS value FROM execution_facts WHERE execution_fact_id = ?`,
+          )
           .get(identity);
-    const value = (row as { value?: number | null } | null)?.value;
+    const value = row?.value;
     return value !== null && value !== undefined && Number(value) === rollup.value;
   });
 
@@ -244,13 +258,12 @@ const runCorpus = async (databasePath: string, tenTimes: boolean) => {
   const platforms = platformCounts(database);
   const storeLayer = makeDuckDbNodeApiAnalyticalStoreLive(duckdbPath);
   const importerLayer = Layer.provide(makeLocalTraceImporterLive(database), storeLayer);
-  const invoke = <A>(
-    effect: Effect.Effect<A, unknown, LocalTraceImporter | DuckDbAnalyticalStore>,
-  ) => Effect.runPromise(effect.pipe(Effect.provide(importerLayer), Effect.scoped));
+  const invoke = <A, E>(effect: Effect.Effect<A, E, LocalTraceImporter | DuckDbAnalyticalStore>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(importerLayer), Effect.scoped));
   const backfill = (options: Parameters<typeof runHistoricalBackfill>[1]) =>
     invoke(runHistoricalBackfill(database, options));
-  const store = <A>(
-    effect: (service: typeof DuckDbAnalyticalStore.Service) => Effect.Effect<A, unknown>,
+  const store = <A, E>(
+    effect: (service: typeof DuckDbAnalyticalStore.Service) => Effect.Effect<A, E>,
   ) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -345,19 +358,21 @@ const runCorpus = async (databasePath: string, tenTimes: boolean) => {
       cold: {
         wall_time_ms: coldElapsed,
         facts_visited: cold.source_rows_seen,
-        response_bytes: responseBytes({ health: afterCold.health, rollups: afterCold.rollups }),
+        response_bytes: Buffer.byteLength(
+          JSON.stringify({ health: afterCold.health, rollups: afterCold.rollups }),
+        ),
         process_rss_bytes: coldRss,
       },
       warm: {
         wall_time_ms: warmElapsed,
         facts_visited: warm.source_rows_seen,
-        response_bytes: responseBytes({ health: afterWarm }),
+        response_bytes: Buffer.byteLength(JSON.stringify({ health: afterWarm })),
         process_rss_bytes: warmRss,
       },
       steady_resume: {
         wall_time_ms: steadyElapsed,
         facts_visited: steady.source_rows_seen,
-        response_bytes: responseBytes(steady),
+        response_bytes: Buffer.byteLength(JSON.stringify(steady)),
         process_rss_bytes: steadyRss,
       },
       duckdb_memory_bytes: null,
@@ -396,6 +411,12 @@ const main = async () => {
     }
   };
   try {
+    const runs: Partial<
+      Record<"one_x" | "ten_x" | "representative_ten_x", Awaited<ReturnType<typeof runCorpus>>>
+    > = {};
+    if (only !== "10x" && only !== "representative-10x") runs.one_x = await corpus("1x");
+    if (only === "10x") runs.ten_x = await corpus("10x");
+    if (only !== "1x" && only !== "10x") runs.representative_ten_x = await corpus("10x", true);
     const report = {
       generated_at: new Date().toISOString(),
       source: resolve(source),
@@ -405,23 +426,9 @@ const main = async () => {
         only === "10x"
           ? "executed_explicitly"
           : "not_executed: pass --only 10x after confirming at least 3GB free scratch space",
-      ...(only === "10x" || only === "representative-10x"
-        ? {}
-        : {
-            one_x: await corpus("1x"),
-          }),
-      ...(only === "10x"
-        ? {
-            ten_x: await corpus("10x"),
-          }
-        : {}),
-      ...(only === "1x" || only === "10x"
-        ? {}
-        : { representative_ten_x: await corpus("10x", true) }),
+      ...runs,
     };
-    console.log(
-      JSON.stringify(report, (_, value) => (typeof value === "bigint" ? Number(value) : value), 2),
-    );
+    console.log(JSON.stringify(report, null, 2));
     const allChecks = [report.one_x, report.ten_x, report.representative_ten_x].flatMap((run) =>
       run === undefined ? [] : Object.values(run.checks),
     );

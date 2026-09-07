@@ -14,7 +14,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
 import { SESSION_STATE_DIR } from "@selftune/runtime/constants";
-import type { PreToolUsePayload } from "@selftune/runtime/types";
+import { BaseToolUsePayload, type PreToolUsePayload } from "@selftune/runtime/types";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
+const SkillFileTarget = Schema.Struct({ file_path: Schema.String });
 
 import {
   SILENT_HOOK_SUCCESS,
@@ -41,18 +45,21 @@ export function extractSkillNameFromPath(filePath: string): string {
 // Session state (minimal — just tracks which skills we've already warned about)
 // ---------------------------------------------------------------------------
 
-interface GuardState {
-  session_id: string;
-  warned_skills: string[];
-}
+const GuardState = Schema.Struct({
+  session_id: Schema.String,
+  warned_skills: Schema.mutable(Schema.Array(Schema.String)),
+});
+type GuardState = typeof GuardState.Type;
 
 function loadGuardState(path: string, sessionId: string): GuardState {
   if (!existsSync(path)) {
     return { session_id: sessionId, warned_skills: [] };
   }
   try {
-    const data = JSON.parse(readFileSync(path, "utf-8")) as GuardState;
-    if (data.session_id === sessionId && Array.isArray(data.warned_skills)) {
+    const data = Schema.decodeUnknownSync(Schema.fromJsonString(GuardState))(
+      readFileSync(path, "utf-8"),
+    );
+    if (data.session_id === sessionId) {
       return data;
     }
   } catch {
@@ -79,7 +86,8 @@ function saveGuardState(path: string, state: GuardState): void {
  */
 export function processPreToolUse(payload: PreToolUsePayload, statePath: string): string | null {
   const filePath =
-    typeof payload.tool_input?.file_path === "string" ? payload.tool_input.file_path : "";
+    Option.getOrNull(Schema.decodeUnknownOption(SkillFileTarget)(payload.tool_input))?.file_path ??
+    "";
 
   if (!isSkillMdWrite(payload.tool_name, filePath)) return null;
 
@@ -99,7 +107,7 @@ export function processPreToolUse(payload: PreToolUsePayload, statePath: string)
 
 export async function runSkillChangeGuardHook(rawStdin: string): Promise<HookExecutionResult> {
   try {
-    const payload: PreToolUsePayload = JSON.parse(rawStdin);
+    const payload = Schema.decodeUnknownSync(Schema.fromJsonString(BaseToolUsePayload))(rawStdin);
     const sessionId = payload.session_id ?? "unknown";
     const safe = sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
     const statePath = `${SESSION_STATE_DIR}/guard-state-${safe}.json`;

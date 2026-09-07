@@ -10,6 +10,7 @@ import {
   openDb,
 } from "@selftune/local-store";
 import { captureCorrectionSignalStudies } from "@selftune/orchestration/orchestrate/correction-signal-studies";
+import type { ExplicitCorrectionSignal } from "@selftune/runtime/correction-study/signal-discovery";
 import * as Effect from "effect/Effect";
 
 import { captureManagedCorrectionStudy } from "../src/correction-study-service.js";
@@ -38,14 +39,16 @@ function verifier() {
       success_contract: "Portal status proves the claim.",
       check_description: "Checks portal status.",
     },
-    evidence: ["known_failure", "known_good", "boundary", "adversarial"].map((label) => ({
-      evidence_id: `control-${label}`,
-      label,
-      expected_decision: label === "known_failure" ? "reject" : "accept",
-      observed_decision: label === "known_failure" ? "reject" : "accept",
-      partition: "verifier_calibration",
-      candidate_strategy_reference: null,
-    })),
+    evidence: (["known_failure", "known_good", "boundary", "adversarial"] as const).map(
+      (label) => ({
+        evidence_id: `control-${label}`,
+        label,
+        expected_decision: label === "known_failure" ? "reject" : "accept",
+        observed_decision: label === "known_failure" ? "reject" : "accept",
+        partition: "verifier_calibration",
+        candidate_strategy_reference: null,
+      }),
+    ),
   });
 }
 
@@ -64,15 +67,32 @@ describe("correction learning E2 acceptance", () => {
     const postRevision = revision(after);
     const id = skillId("release-checklist");
 
-    const signal = {
+    const signal: ExplicitCorrectionSignal = {
       candidate_id: "signal-1",
+      kind: "explicit_correction_hypothesis",
+      dry_run: true,
       evidence_level: "E0.5" as const,
       review_status: "review_required" as const,
-      reason: "User corrected the skill after a false upload claim.",
-      skill: { name: "release-checklist", pre_revision: preRevision, post_revision: postRevision },
-      source: { session_id: "session-1", prompt_id: "prompt-2", raw_source_ref_digest: null },
+      reason: "raw_exact_contents",
+      skill: {
+        name: "release-checklist",
+        path: "[local-path-redacted]",
+        pre_revision: preRevision,
+        post_revision: postRevision,
+      },
+      source: {
+        harness: "codex",
+        session_id: "session-1",
+        prompt_id: "prompt-2",
+        skill_invocation_id: "invocation-1",
+        raw_source_ref_digest: null,
+      },
       raw_edit_digest: fingerprint(after),
+      raw_content_digests: { before: hash(before), after: hash(after) },
       deferred_skill_names: null,
+      correlation_truncated: false,
+      intent_detection: "heuristic",
+      proves_causality: false,
       correction_intent: "Require portal confirmation before declaring upload success.",
     };
     const captured = await captureCorrectionSignalStudies({

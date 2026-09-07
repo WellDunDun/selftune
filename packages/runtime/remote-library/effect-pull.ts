@@ -16,10 +16,17 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
-import { mergeSkillIntelligenceLearnedState } from "../skill-intelligence/learned-state.js";
+import {
+  mergeSkillIntelligenceLearnedState,
+  SkillIntelligenceLearnedState,
+} from "../skill-intelligence/learned-state.js";
 import { CLIError } from "../utils/cli-error.js";
 import { assertSafeRelativePath } from "./package-identity.js";
-import { UnknownRecord } from "./package-bundle.js";
+
+const SkillSetManifestIdentity = Schema.Struct({
+  set_id: Schema.String,
+  revision_hash: Schema.NullOr(Schema.String),
+});
 
 export type PullRemoteLibraryError = CLIError | RemoteLibraryError;
 
@@ -115,11 +122,9 @@ const pullRemoteSkillSetManifestEffect = Effect.fn(
     );
   }
 
-  const parsed = yield* Effect.try({
-    try: (): unknown => JSON.parse(new TextDecoder().decode(bytes)),
-    catch: () => invalidSkillSetManifest(options.setId),
-  });
-  const decoded = yield* Schema.decodeUnknownEffect(UnknownRecord)(parsed).pipe(
+  const decoded = yield* Schema.decodeUnknownEffect(
+    Schema.fromJsonString(SkillSetManifestIdentity),
+  )(new TextDecoder().decode(bytes)).pipe(
     Effect.mapError(() => invalidSkillSetManifest(options.setId)),
   );
   if (decoded.set_id !== options.setId || decoded.revision_hash !== options.artifact.revisionHash) {
@@ -212,10 +217,13 @@ const mergeLearnedStateEffect = Effect.fn("selftune.runtime.remoteLibrary.mergeL
         ),
       );
     }
-    const parsed = yield* Effect.try({
-      try: (): unknown => JSON.parse(new TextDecoder().decode(bytes)),
-      catch: (cause) => localPullFailure(`decoding learned state ${artifact.artifactId}`, cause),
-    });
+    const parsed = yield* Schema.decodeUnknownEffect(
+      Schema.fromJsonString(SkillIntelligenceLearnedState),
+    )(new TextDecoder().decode(bytes)).pipe(
+      Effect.mapError((cause) =>
+        localPullFailure(`decoding learned state ${artifact.artifactId}`, cause),
+      ),
+    );
     yield* Effect.try({
       try: () => mergeSkillIntelligenceLearnedState(db, parsed),
       catch: (cause) => localPullFailure(`merging learned state ${artifact.artifactId}`, cause),

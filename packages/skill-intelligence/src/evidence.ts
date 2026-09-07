@@ -317,10 +317,7 @@ export function discoverOverlappingCommunities(
 export function buildSessionEvidence(
   observations: ReadonlyArray<TrustedSkillObservationRow>,
   installedIds: ReadonlySet<string>,
-): {
-  orderedBySession: Map<string, TrustedSkillObservationRow[]>;
-  idsBySession: Map<string, string[]>;
-} {
+) {
   const orderedBySession = new Map<string, TrustedSkillObservationRow[]>();
   for (const row of observations) {
     const id = skillId(row.skill_name);

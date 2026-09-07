@@ -60,6 +60,8 @@ const nodeFileSystem = {
     if (!strictFlagsAvailable && process.platform !== "win32") {
       throw new Error("safe directory flags unavailable");
     }
+    // SAFETY-TYPEOF: Recheck the platform-dependent constants at their bitmask use so undefined
+    // can never be coerced into a filesystem-open flag.
     return openSync(
       path,
       fileSystemConstants.O_RDONLY |
@@ -73,6 +75,8 @@ const nodeFileSystem = {
     if (!strictFlagAvailable && process.platform !== "win32") {
       throw new Error("O_NOFOLLOW unavailable");
     }
+    // SAFETY-TYPEOF: Recheck O_NOFOLLOW at its bitmask use so undefined can never be coerced into a
+    // filesystem-open flag.
     return openSync(
       path,
       fileSystemConstants.O_RDONLY |
@@ -104,6 +108,8 @@ function normalizeNodeStat(stat) {
 }
 
 function reliableIdentityPart(value, positive) {
+  // SAFETY-TYPEOF: Filesystem identities enter through native bigint stats and injected decimal
+  // fixture values; bigint requires explicit lossless conversion before the shared decimal check.
   const encoded = typeof value === "bigint" ? value.toString() : String(value);
   if (!/^(?:0|[1-9]\d*)$/.test(encoded)) return false;
   const parsed = BigInt(encoded);
@@ -111,6 +117,8 @@ function reliableIdentityPart(value, positive) {
 }
 
 function reliableIdentity(stat) {
+  // SAFETY-TYPEOF: The collector accepts normalized native stats and injected test stats; their
+  // timestamp representations are validated before identity comparisons guard anchored reads.
   return (
     reliableIdentityPart(stat.dev, false) &&
     reliableIdentityPart(stat.ino, true) &&
@@ -455,6 +463,8 @@ function positiveInteger(value, label) {
 }
 
 function identityInteger(value, label, positive) {
+  // SAFETY-TYPEOF: Device and inode values arrive as CLI arguments and must be canonical decimal
+  // strings before BigInt parsing participates in root-identity confinement.
   if (typeof value !== "string" || !/^(?:0|[1-9]\d*)$/.test(value)) {
     fail("invalid_package", `Invalid collector ${label}`, ".");
   }
@@ -467,6 +477,8 @@ function identityInteger(value, label, positive) {
 
 function parseArguments(argv) {
   const root = argv[2];
+  // SAFETY-TYPEOF: The collector root arrives from argv and must be a string before absolute-path
+  // validation and anchored directory traversal.
   if (typeof root !== "string" || !isAbsolute(root)) {
     fail("invalid_package", "Collector root must be absolute", ".");
   }
@@ -505,6 +517,8 @@ function parseArguments(argv) {
     !Array.isArray(rules.exact) ||
     !Array.isArray(rules.prefixes) ||
     [...rules.exact, ...rules.prefixes].some(
+      // SAFETY-TYPEOF: Ignore rules cross a JSON boundary; every entry must be a simple segment
+      // string before it controls which package paths the collector excludes.
       (entry) => typeof entry !== "string" || entry.length === 0 || entry.includes("/"),
     )
   ) {

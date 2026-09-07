@@ -1,76 +1,56 @@
-import type { ReactNode } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
-
-vi.mock("@selftune/ui/primitives", () => ({
-  Tabs: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  TabsList: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  TabsTrigger: ({ children }: { children?: ReactNode }) => <button>{children}</button>,
-  TabsContent: ({ children }: { children?: ReactNode }) => <section>{children}</section>,
-  Tooltip: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  TooltipTrigger: ({ children, render }: { children?: ReactNode; render?: ReactNode }) => (
-    <div>
-      {render}
-      {children}
-    </div>
-  ),
-  TooltipContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-}));
-
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { TooltipProvider } from "@selftune/ui/primitives";
 import { SkillReportTabs } from "./SkillReportTabs";
 
+afterEach(cleanup);
+
 describe("SkillReportTabs", () => {
-  it("renders only visible tabs and their content", () => {
-    const html = renderToStaticMarkup(
+  it("shows only the selected panel and allows switching between visible tabs", () => {
+    render(
       <SkillReportTabs
         defaultValue="evidence"
         tabs={[
-          {
-            value: "evidence",
-            label: "Evidence",
-            content: <div>Evidence body</div>,
-          },
-          {
-            value: "invocations",
-            label: "Invocations",
-            content: <div>Invocations body</div>,
-          },
-          {
-            value: "hidden",
-            label: "Hidden",
-            hidden: true,
-            content: <div>Hidden body</div>,
-          },
+          { value: "evidence", label: "Evidence", content: <div>Evidence body</div> },
+          { value: "invocations", label: "Invocations", content: <div>Invocations body</div> },
+          { value: "hidden", label: "Hidden", hidden: true, content: <div>Hidden body</div> },
         ]}
       />,
     );
-
-    expect(html).toContain("Evidence");
-    expect(html).toContain("Invocations");
-    expect(html).toContain("Evidence body");
-    expect(html).toContain("Invocations body");
-    expect(html).not.toContain("Hidden");
-    expect(html).not.toContain("Hidden body");
+    expect(screen.getByRole("tabpanel").textContent).toContain("Evidence body");
+    expect(screen.queryByText("Invocations body")).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Hidden" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Invocations" }));
+    expect(screen.getByRole("tabpanel").textContent).toContain("Invocations body");
+    expect(screen.queryByText("Evidence body")).toBeNull();
+    expect(screen.queryByText("Hidden body")).toBeNull();
   });
 
-  it("renders tooltip and badge content when configured", () => {
-    const html = renderToStaticMarkup(
-      <SkillReportTabs
-        defaultValue="invocations"
-        tabs={[
-          {
-            value: "invocations",
-            label: "Invocations",
-            badge: <span>12</span>,
-            tooltip: "Operational invocations only",
-            content: <div>Invocations body</div>,
-          },
-        ]}
-      />,
+  it("renders the badge and exposes the tooltip on keyboard focus", async () => {
+    render(
+      <TooltipProvider>
+        <SkillReportTabs
+          defaultValue="invocations"
+          tabs={[
+            {
+              value: "invocations",
+              label: "Invocations",
+              badge: <span>12</span>,
+              tooltip: "Operational invocations only",
+              content: <div>Invocations body</div>,
+            },
+          ]}
+        />
+      </TooltipProvider>,
     );
-
-    expect(html).toContain("Invocations");
-    expect(html).toContain("12");
-    expect(html).toContain("Operational invocations only");
+    const tab = screen.getByRole("tab", { name: "Invocations12" });
+    expect(tab.textContent).toContain("12");
+    expect(screen.queryByText("Operational invocations only")).toBeNull();
+    fireEvent.keyDown(document.body, { key: "Tab" });
+    fireEvent.focus(tab);
+    expect(
+      (await screen.findByText("Operational invocations only")).hasAttribute("data-open"),
+    ).toBe(true);
   });
 });

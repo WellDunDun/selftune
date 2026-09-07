@@ -1,12 +1,14 @@
 /* oxlint-disable no-await-in-loop -- SSE reads and lifecycle mutations are ordered */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import * as Schema from "effect/Schema";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { InsightsResponse } from "../../packages/runtime/dashboard-contract.js";
+import { draftResult, releaseGate, releaseResult } from "./lifecycle-fixtures.js";
 import {
-  type DashboardUpdateEvent,
+  DashboardUpdateEvent,
   insightDecisionResources,
 } from "../../packages/runtime/dashboard-reactivity.js";
 
@@ -28,14 +30,21 @@ const insightsFixture: InsightsResponse = {
         summary: "Create a reusable workflow",
         skillNames: ["research"],
         evidence: {
-          sessionCount: 3,
-          projectCount: 2,
-          successRate: 1,
-          heldOutSessionCount: 1,
+          evidenceVersion: 1,
+          supportSessions: 3,
+          projectDiversity: 2,
+          temporalSpanDays: 1,
+          outcomeQuality: 1,
+          coUsageLift: null,
+          sequenceConsistency: null,
+          completionRate: 1,
+          confidence: 0.8,
+          uncertainty: 0.2,
           exploratory: false,
         },
         supportingSessionIds: ["one", "two"],
         heldOutSessionIds: ["three"],
+        redactedExcerpts: [],
         generatedAt: "2026-07-16T00:00:00.000Z",
         status: "pending",
         decision: null,
@@ -74,7 +83,8 @@ async function readUpdateEvents(
       const lines = frame.split("\n");
       if (!lines.includes("event: update")) continue;
       const data = lines.find((line) => line.startsWith("data: "))?.slice(6);
-      if (data) updates.push(JSON.parse(data) as DashboardUpdateEvent);
+      if (data)
+        updates.push(Schema.decodeUnknownSync(Schema.fromJsonString(DashboardUpdateEvent))(data));
     }
   }
   await reader.cancel();
@@ -113,9 +123,9 @@ describe("Insights live semantic reactivity", () => {
         if (reviewAttempts === 1) throw new Error("Decision was not persisted");
         return insightsFixture.snapshot.candidates[0];
       },
-      insightDrafter: () => ({ draft: { skill_dir: "/tmp/draft" } }),
-      insightEvaluator: () => ({ recommended: true, blockers: [] }),
-      insightReleaser: () => ({ package_path: "/tmp/released" }),
+      insightDrafter: () => draftResult,
+      insightEvaluator: () => releaseGate,
+      insightReleaser: () => releaseResult,
     });
     try {
       const origin = `http://127.0.0.1:${server.port}`;

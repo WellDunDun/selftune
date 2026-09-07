@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
+import { Schema } from "effect";
 
-import type { BadgeFormat } from "@selftune/runtime/badge/badge-data";
 import type {
   DashboardActionEvent,
   OverviewResponse,
@@ -17,7 +17,7 @@ import {
 import { doctor } from "@selftune/runtime/observability";
 import type { StatusResult } from "@selftune/runtime/status";
 import { computeStatus } from "@selftune/runtime/status";
-import type { EvolutionAuditEntry, EvolutionEvidenceEntry } from "@selftune/runtime/types";
+import type { EvolutionEvidenceEntry } from "@selftune/runtime/types";
 
 import { dashboardCorsHeaders, withDashboardCors } from "../dashboard-http.js";
 import type { ActionRunner } from "./index.js";
@@ -73,7 +73,7 @@ async function computeStatusFromDb(db: Database): Promise<StatusResult> {
   const telemetry = querySessionTelemetry(db);
   const skillRecords = querySkillUsageRecords(db);
   const queryRecords = queryQueryLog(db);
-  const auditEntries = queryEvolutionAudit(db) as EvolutionAuditEntry[];
+  const auditEntries = queryEvolutionAudit(db);
   const doctorResult = await doctor();
   return computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
 }
@@ -103,19 +103,21 @@ export function createDashboardCoreRoutes(options: DashboardCoreRouteOptions): D
 
   let cachedStatus: StatusResult | null = null;
   let lastStatusRefreshAt = 0;
-  let statusRefresh: Promise<void> | null = null;
+  let statusRefresh: Promise<StatusResult> | null = null;
   const statusCacheTtlMs = 30_000;
 
-  const refreshStatus = async (force = false): Promise<void> => {
-    const fresh = cachedStatus !== null && Date.now() - lastStatusRefreshAt < statusCacheTtlMs;
-    if (!force && fresh) return;
+  const refreshStatus = async (): Promise<StatusResult> => {
+    if (cachedStatus !== null && Date.now() - lastStatusRefreshAt < statusCacheTtlMs) {
+      return cachedStatus;
+    }
     if (statusRefresh) return statusRefresh;
     statusRefresh = Promise.resolve(getStatusResult()).then((status) => {
       cachedStatus = status;
       lastStatusRefreshAt = Date.now();
+      return status;
     });
     try {
-      await statusRefresh;
+      return await statusRefresh;
     } finally {
       statusRefresh = null;
     }
@@ -123,11 +125,12 @@ export function createDashboardCoreRoutes(options: DashboardCoreRouteOptions): D
 
   const getCachedStatus = async (): Promise<StatusResult> => {
     if (!cachedStatus) {
-      await refreshStatus(true);
-    } else {
-      void refreshStatus();
+      return refreshStatus();
     }
-    return cachedStatus as StatusResult;
+    void refreshStatus().catch((cause) => {
+      console.error("Dashboard status refresh failed:", cause);
+    });
+    return cachedStatus;
   };
 
   const handle = async (
@@ -151,12 +154,11 @@ export function createDashboardCoreRoutes(options: DashboardCoreRouteOptions): D
           { status: 403, headers: dashboardCorsHeaders() },
         );
       }
-      let body: Record<string, unknown> = {};
+      let body: Schema.Json;
       try {
-        const parsed: unknown = await request.json();
-        if (typeof parsed === "object" && parsed !== null) {
-          body = parsed as Record<string, unknown>;
-        }
+        body = Schema.decodeUnknownSync(
+          Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
+        )(await request.text());
       } catch {
         return Response.json(
           {
@@ -191,11 +193,8 @@ export function createDashboardCoreRoutes(options: DashboardCoreRouteOptions): D
         );
       }
       const requestedFormat = url.searchParams.get("format");
-      const validFormats = new Set(["svg", "markdown", "url"]);
-      const format: BadgeFormat =
-        requestedFormat && validFormats.has(requestedFormat)
-          ? (requestedFormat as BadgeFormat)
-          : "svg";
+      const validFormats = ["svg", "markdown", "url"] as const;
+      const format = validFormats.find((candidate) => candidate === requestedFormat) ?? "svg";
       return withDashboardCors(handleBadge(await getCachedStatus(), skillName, format));
     }
 

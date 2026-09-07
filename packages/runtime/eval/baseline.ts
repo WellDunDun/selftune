@@ -9,9 +9,11 @@
  */
 
 import { parseArgs } from "node:util";
+import * as Schema from "effect/Schema";
 
 import { writeGradingBaseline } from "../localdb/direct-write.js";
-import type { BaselineResult, EvalEntry } from "../types.js";
+import type { BaselineResult } from "../types.js";
+import { EvalEntry } from "../types/evaluation.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import { callLlm, detectLlmAgent } from "../utils/llm-call.js";
 import { buildTriggerCheckPrompt, parseTriggerResponse } from "../utils/trigger-check.js";
@@ -190,9 +192,26 @@ Options:
 
   // Load eval set
   let evalSet: EvalEntry[];
-  if (values["eval-set"] && existsSync(values["eval-set"])) {
-    const raw = readFileSync(values["eval-set"], "utf-8");
-    evalSet = JSON.parse(raw) as EvalEntry[];
+  if (values["eval-set"]) {
+    const evalSetPath = values["eval-set"];
+    if (!existsSync(evalSetPath)) {
+      throw new CLIError(
+        `Eval set not found at ${evalSetPath}.`,
+        "FILE_NOT_FOUND",
+        "Provide an existing --eval-set JSON file or omit the flag to build from local logs.",
+      );
+    }
+    try {
+      evalSet = Schema.decodeUnknownSync(
+        Schema.fromJsonString(Schema.mutable(Schema.Array(EvalEntry))),
+      )(readFileSync(evalSetPath, "utf8"), { onExcessProperty: "preserve" });
+    } catch {
+      throw new CLIError(
+        `Eval set at ${evalSetPath} is invalid.`,
+        "INVALID_FLAG",
+        "Use a JSON array of evaluation entries with a string query and boolean should_trigger.",
+      );
+    }
   } else {
     // Build from logs via SQLite
     const { getDb } = await import("../localdb/db.js");
@@ -201,11 +220,7 @@ Options:
     const db = getDb();
     const skillRecords = querySkillUsageRecords(db);
     const queryRecords = queryQueryLog(db);
-    evalSet = buildEvalSet(
-      skillRecords as Parameters<typeof buildEvalSet>[0],
-      queryRecords as Parameters<typeof buildEvalSet>[1],
-      values.skill,
-    );
+    evalSet = buildEvalSet(skillRecords, queryRecords, values.skill);
   }
 
   // Detect agent

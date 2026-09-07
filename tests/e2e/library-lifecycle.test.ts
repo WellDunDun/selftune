@@ -115,6 +115,7 @@ describe("black-box local Library lifecycle", () => {
     createSkill(codexRegistry, "trial-skill");
 
     const firstCatalog = await loadLibraryCatalog({
+      sourceMetadata: { homeDir: root },
       searchDirs: [codexRegistry, openCodeRegistry],
       skillSetConfigRoot: configRoot,
       quarantineRoot: join(configRoot, "quarantine"),
@@ -154,10 +155,9 @@ describe("black-box local Library lifecycle", () => {
     );
     const drafted = await draftSynthesisCandidate(candidate.candidateId, undefined, { configRoot });
     expect(existsSync(join(drafted.draft.skill_dir, "evals", "generated.json"))).toBe(true);
-    const provenance = JSON.parse(
-      readFileSync(join(drafted.draft.skill_dir, "selftune.synthesis.json"), "utf8"),
-    ) as { held_out_session_ids: string[] };
-    expect(provenance.held_out_session_ids.length).toBeGreaterThan(0);
+    expect(
+      JSON.parse(readFileSync(join(drafted.draft.skill_dir, "selftune.synthesis.json"), "utf8")),
+    ).toMatchObject({ held_out_session_ids: expect.arrayContaining([expect.any(String)]) });
 
     const result = evaluateReleaseGate(
       ReleaseGateInput.make({
@@ -275,6 +275,7 @@ describe("black-box local Library lifecycle", () => {
           decisionHistory: true,
         },
         catalogOptions: {
+          sourceMetadata: { homeDir: root },
           searchDirs: [codexRegistry, openCodeRegistry],
           quarantineRoot: join(configRoot, "quarantine"),
         },

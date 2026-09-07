@@ -111,8 +111,9 @@ const evidenceFixture: EvolutionEvidenceEntry[] = [
       ],
     },
   },
-] as EvolutionEvidenceEntry[];
+];
 const skillReportFixture: SkillReportResponse = {
+  watch_trust_score: null,
   skill_name: reportSkillName,
   usage: {
     total_checks: 1,

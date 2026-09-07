@@ -10,6 +10,8 @@ import {
 import { createOrGetCorrectionCandidateEvaluation } from "@selftune/local-store";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
 
 import { changedLineCount } from "./historical-evidence-safety.js";
 
@@ -117,6 +119,17 @@ export interface ProactiveCandidateEvaluationPersistence {
     ProactiveCandidateEvaluationRecord,
     ProactiveCandidateEvaluationPersistenceFailure
   >;
+}
+
+export class ProactiveEvaluationPersistence extends Context.Service<
+  ProactiveEvaluationPersistence,
+  ProactiveCandidateEvaluationPersistence
+>()("SelfTune/ProactiveEvaluationPersistence") {}
+
+export function makeLocalStoreProactiveEvaluationLayer(database: Database) {
+  return Layer.sync(ProactiveEvaluationPersistence)(() =>
+    makeLocalStoreProactiveCandidateEvaluationPersistence(database),
+  );
 }
 
 /**
@@ -266,11 +279,11 @@ function record(
 }
 
 export const runProactiveCorrectionE2 = Effect.fn("ProactiveCorrectionE2.run")(function* (
-  unknownInput: unknown,
+  request: ProactiveCorrectionE2Request,
   executor: BlindBenchmarkExecutor,
   persistence: ProactiveCandidateEvaluationPersistence,
 ) {
-  const input = yield* Schema.decodeUnknownEffect(ProactiveCorrectionE2Request)(unknownInput).pipe(
+  const input = yield* Schema.decodeUnknownEffect(ProactiveCorrectionE2Request)(request).pipe(
     Effect.mapError(
       (error) =>
         new ProactiveCorrectionE2Failure({ code: "INVALID_REQUEST", message: error.message }),

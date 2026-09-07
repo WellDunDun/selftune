@@ -73,12 +73,12 @@ function toCliError(operation: string, cause: unknown): CLIError {
       );
 }
 
-export function runWorkflowsActionWithDependencies(
-  input: WorkflowProgramInput,
-  jsonRequested: boolean,
-  dependencies: WorkflowsActionDependencies,
-) {
-  return Effect.fn(`selftune.cli.workflows.${input.operation}`)(function* () {
+export const runWorkflowsActionWithDependencies = Effect.fn(
+  function* (
+    input: WorkflowProgramInput,
+    jsonRequested: boolean,
+    dependencies: WorkflowsActionDependencies,
+  ) {
     const runtime = yield* Effect.tryPromise({
       try: dependencies.loadModule,
       catch: importFailure,
@@ -102,8 +102,9 @@ export function runWorkflowsActionWithDependencies(
       },
       catch: (cause) => toCliError(input.operation, cause),
     });
-  })();
-}
+  },
+  (effect, input) => effect.pipe(Effect.withSpan(`selftune.cli.workflows.${input.operation}`)),
+);
 
 export function makeLiveWorkflowsAction(
   dependencies: WorkflowsActionDependencies = LIVE_DEPENDENCIES,

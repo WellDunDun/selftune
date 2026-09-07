@@ -6,14 +6,16 @@ import type { EvolutionEntry, PendingProposal, UnmatchedQuery } from "../types";
 import { timeAgo } from "../lib/format";
 import { ClockIcon, GitPullRequestArrowIcon, SearchXIcon, ActivityIcon } from "lucide-react";
 
-const ACTION_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  created: "outline",
-  validated: "secondary",
-  deployed: "default",
-  rejected: "destructive",
-  rolled_back: "destructive",
-  pending: "secondary",
-};
+const ACTION_VARIANT = new Map(
+  Object.entries({
+    created: "outline",
+    validated: "secondary",
+    deployed: "default",
+    rejected: "destructive",
+    rolled_back: "destructive",
+    pending: "secondary",
+  } satisfies Record<string, "default" | "secondary" | "destructive" | "outline">),
+);
 
 export function ActivityPanel({
   evolution,
@@ -118,7 +120,7 @@ export function ActivityPanel({
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-2">
                       <Badge
-                        variant={ACTION_VARIANT[p.action] ?? "secondary"}
+                        variant={ACTION_VARIANT.get(p.action) ?? "secondary"}
                         className="text-[10px]"
                       >
                         {p.action}
@@ -165,7 +167,7 @@ export function ActivityPanel({
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2">
                     <Badge
-                      variant={ACTION_VARIANT[entry.action] ?? "secondary"}
+                      variant={ACTION_VARIANT.get(entry.action) ?? "secondary"}
                       className="text-[10px]"
                     >
                       {entry.action}

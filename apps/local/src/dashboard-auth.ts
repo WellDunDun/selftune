@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import * as Schema from "effect/Schema";
 
 import { dashboardCorsHeaders } from "./dashboard-http.js";
 
@@ -258,15 +259,9 @@ export function createDashboardAuth(options: DashboardAuthOptions): DashboardAut
       }
       let token: string | null = null;
       try {
-        const body: unknown = await request.json();
-        if (
-          typeof body === "object" &&
-          body !== null &&
-          "token" in body &&
-          typeof body.token === "string"
-        ) {
-          token = body.token;
-        }
+        token = Schema.decodeUnknownSync(Schema.Struct({ token: Schema.String }))(
+          await request.json(),
+        ).token;
       } catch {
         token = null;
       }

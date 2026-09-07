@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
 
 import { inspectDurableArtifactSet } from "../../authority/durable-artifact.js";
 import { reproveAuthority } from "../../authority/reproof.js";
@@ -34,7 +36,10 @@ import {
   type WindowsServiceInstallationReceiptInput,
   type WindowsServiceInstallationStoreWithLegacyCleanup,
 } from "./store.js";
-import { makeWindowsServiceLegacyCleanupController } from "./legacy-cleanup-controller.js";
+import {
+  WindowsLegacyCleanupController,
+  makeWindowsLegacyCleanupControllerLayer,
+} from "./legacy-cleanup-controller.js";
 import type { WindowsServiceLegacyCleanupJournal } from "./legacy-cleanup.js";
 import type { WindowsScheduledTaskState, WindowsTaskScheduler } from "../scheduler.js";
 
@@ -378,8 +383,26 @@ function refuseMutation(
   );
 }
 
-export function makeWindowsServiceInstallationController(
+export class WindowsInstallationController extends Context.Service<
+  WindowsInstallationController,
+  WindowsServiceInstallationController
+>()("SelfTune/WindowsInstallationController") {}
+
+export function makeWindowsInstallationControllerLayer(
   dependencies: WindowsServiceInstallationControllerDependencies,
+) {
+  const legacy = makeWindowsLegacyCleanupControllerLayer(dependencies);
+  return Layer.effect(WindowsInstallationController)(
+    Effect.gen(function* () {
+      const legacyCleanup = yield* WindowsLegacyCleanupController;
+      return makeWindowsServiceInstallationController(dependencies, legacyCleanup);
+    }),
+  ).pipe(Layer.provide(legacy));
+}
+
+function makeWindowsServiceInstallationController(
+  dependencies: WindowsServiceInstallationControllerDependencies,
+  legacyCleanup: WindowsLegacyCleanupController["Service"],
 ): WindowsServiceInstallationController {
   const readArtifact = (path: string) =>
     mapFailure("read-installation-artifact", dependencies.artifacts.read(path));
@@ -594,8 +617,6 @@ export function makeWindowsServiceInstallationController(
     yield* removeIfMatching(artifacts.launcher);
     yield* removeIfMatching(artifacts.wrapper);
   });
-
-  const legacyCleanup = makeWindowsServiceLegacyCleanupController(dependencies);
 
   const beginLegacyCleanup = Effect.fn("SelfTuneService.windowsInstallation.beginLegacyCleanup")(
     function* (

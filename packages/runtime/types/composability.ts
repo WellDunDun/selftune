@@ -1,3 +1,5 @@
+import * as Schema from "effect/Schema";
+
 /** A pair of skills that co-occur in sessions. */
 export interface CoOccurrencePair {
   skill_a: string;
@@ -151,23 +153,34 @@ export interface WorkflowDiscoveryReport {
 }
 
 /** Provenance trail for a package search run. */
-export interface PackageSearchProvenance {
-  frontier_size: number;
-  parent_selection_method: string;
-  candidate_fingerprints: string[];
-  surface_plan?: {
-    routing_count: number;
-    body_count: number;
-    weakness_source: string;
-    routing_weakness: number | null;
-    body_weakness: number | null;
-  };
-  evaluation_summaries: Array<{
-    candidate_id: string;
-    decision: string;
-    rationale: string;
-  }>;
-}
+export const PackageSearchProvenance = Schema.Struct({
+  frontier_size: Schema.mutableKey(Schema.Number),
+  parent_selection_method: Schema.mutableKey(Schema.String),
+  candidate_fingerprints: Schema.mutableKey(Schema.mutable(Schema.Array(Schema.String))),
+  surface_plan: Schema.mutableKey(
+    Schema.optionalKey(
+      Schema.Struct({
+        routing_count: Schema.mutableKey(Schema.Number),
+        body_count: Schema.mutableKey(Schema.Number),
+        weakness_source: Schema.mutableKey(Schema.String),
+        routing_weakness: Schema.mutableKey(Schema.NullOr(Schema.Number)),
+        body_weakness: Schema.mutableKey(Schema.NullOr(Schema.Number)),
+      }),
+    ),
+  ),
+  evaluation_summaries: Schema.mutableKey(
+    Schema.mutable(
+      Schema.Array(
+        Schema.Struct({
+          candidate_id: Schema.mutableKey(Schema.String),
+          decision: Schema.mutableKey(Schema.String),
+          rationale: Schema.mutableKey(Schema.String),
+        }),
+      ),
+    ),
+  ),
+});
+export type PackageSearchProvenance = typeof PackageSearchProvenance.Type;
 
 /** Result of a bounded package search run. */
 export interface PackageSearchRunResult {

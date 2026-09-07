@@ -1,3 +1,4 @@
+import { decodeSkillUsageLine } from "./log-contracts.js";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -31,17 +32,17 @@ export function readEffectiveSkillUsageRecords(
   repairedSessionsPath: string = REPAIRED_SKILL_SESSIONS_MARKER,
 ): SkillUsageRecord[] {
   const repairedRecords = filterActionableSkillUsageRecords(
-    readJsonl<SkillUsageRecord>(repairedSkillLogPath),
+    readJsonl(repairedSkillLogPath, decodeSkillUsageLine),
   );
   if (!existsSync(repairedSkillLogPath)) {
     return dedupeSkillUsageRecords(
-      filterActionableSkillUsageRecords(readJsonl<SkillUsageRecord>(rawSkillLogPath)),
+      filterActionableSkillUsageRecords(readJsonl(rawSkillLogPath, decodeSkillUsageLine)),
     );
   }
 
   const repairedSessionIds = loadMarker(repairedSessionsPath);
   const rawRecords = filterActionableSkillUsageRecords(
-    readJsonl<SkillUsageRecord>(rawSkillLogPath),
+    readJsonl(rawSkillLogPath, decodeSkillUsageLine),
   );
 
   if (repairedSessionIds.size === 0) {

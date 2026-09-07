@@ -32,6 +32,17 @@ import {
 import { buildTrustWatchlist } from "@selftune/runtime/trust-model";
 import { loadWatchedSkills } from "@selftune/runtime/watchlist";
 
+function summarizePendingProposal(
+  proposal: OverviewResponse["overview"]["pending_proposals"][number],
+): DashboardShellResponse["pending_proposals"][number] {
+  const summary: DashboardShellResponse["pending_proposals"][number] = {
+    proposal_id: proposal.proposal_id,
+    action: proposal.action,
+  };
+  if (proposal.skill_name) summary.skill_name = proposal.skill_name;
+  return summary;
+}
+
 export function summarizeOverview(response: OverviewResponse): DashboardShellResponse {
   return {
     version: response.version,
@@ -39,11 +50,7 @@ export function summarizeOverview(response: OverviewResponse): DashboardShellRes
     latest_evolutions: response.overview.evolution.flatMap((entry) =>
       entry.skill_name ? [{ timestamp: entry.timestamp, skill_name: entry.skill_name }] : [],
     ),
-    pending_proposals: response.overview.pending_proposals.map((proposal) => ({
-      proposal_id: proposal.proposal_id,
-      action: proposal.action,
-      ...(proposal.skill_name ? { skill_name: proposal.skill_name } : {}),
-    })),
+    pending_proposals: response.overview.pending_proposals.map(summarizePendingProposal),
   };
 }
 
@@ -64,11 +71,7 @@ export function handleDashboardShell(db: Database, version: string): Response {
        ORDER BY timestamp DESC`,
     )
     .all();
-  const pendingProposals = getPendingProposals(db).map((proposal) => ({
-    proposal_id: proposal.proposal_id,
-    action: proposal.action,
-    ...(proposal.skill_name ? { skill_name: proposal.skill_name } : {}),
-  }));
+  const pendingProposals = getPendingProposals(db).map(summarizePendingProposal);
   const response: DashboardShellResponse = {
     version,
     skills,
@@ -173,8 +176,10 @@ function buildAutonomyStatus(db: Database, input: AutonomyStatusInput): Autonomy
   let lastRun: string | null = null;
   try {
     const row = db
-      .query(`SELECT timestamp FROM orchestrate_runs ORDER BY timestamp DESC LIMIT 1`)
-      .get() as { timestamp: string } | null;
+      .query<{ timestamp: string }, []>(
+        `SELECT timestamp FROM orchestrate_runs ORDER BY timestamp DESC LIMIT 1`,
+      )
+      .get();
     lastRun = row?.timestamp ?? null;
   } catch {
     // Table may not exist

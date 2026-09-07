@@ -363,6 +363,32 @@ describe("scoped desktop runtime", () => {
     await runtime.dispose();
   });
 
+  it.each([
+    { body: { error: "Expired authentication" }, message: "Expired authentication" },
+    { body: { error: { code: "DENIED", message: "Not authorized" } }, message: "Not authorized" },
+    { body: { error: { message: 42 } }, message: "SelfTune local API request failed (401)." },
+    { body: null, message: "SelfTune local API request failed (401)." },
+  ])(
+    "retains authenticated HTTP error messages without trusting malformed fields: %j",
+    async ({ body, message }) => {
+      const runtime = ManagedRuntime.make(
+        makeDesktopRuntimeLayer(
+          dependencies({ fetch: async () => Response.json(body, { status: 401 }) }),
+          callbacks(),
+        ),
+      );
+      try {
+        const service = await loadService(runtime);
+        await runtime.runPromise(service.boot);
+        await expect(
+          runtime.runPromise(service.requestJson("/api/health", TrayHealthResponseSchema)),
+        ).rejects.toMatchObject({ operation: "request local API", message });
+      } finally {
+        await runtime.dispose();
+      }
+    },
+  );
+
   it("restores a managed runtime after background installation fails without claiming success", async () => {
     let starts = 0;
     const preferences: boolean[] = [];

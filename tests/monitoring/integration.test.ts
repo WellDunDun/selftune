@@ -5,7 +5,7 @@
  * multi-session data spanning regression and improvement scenarios.
  *
  * Does NOT use mock.module() to avoid global state leakage. Uses
- * dependency injection for watch() via injected log file paths.
+ * an isolated SQLite database and injected audit paths and rollback for watch().
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -15,7 +15,6 @@ import { join } from "node:path";
 
 import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import {
-  type SkillInvocationWriteInput,
   writeEvolutionAuditToDb,
   writeQueryToDb,
   writeSessionTelemetryToDb,
@@ -313,7 +312,7 @@ describe("integration: session windowing across chronological data", () => {
 });
 
 // ---------------------------------------------------------------------------
-// E2E: watch() with file-based log injection
+// E2E: watch() with isolated SQLite and audit evidence
 // ---------------------------------------------------------------------------
 
 describe("integration: watch() reads SQLite and computes result", () => {
@@ -335,7 +334,7 @@ describe("integration: watch() reads SQLite and computes result", () => {
         skill_path: r.skill_path,
         skill_scope: r.skill_scope,
         source: r.source,
-      } as SkillInvocationWriteInput);
+      });
     }
   }
   function seedQueries(records: QueryLogRecord[]): void {
@@ -396,7 +395,7 @@ describe("integration: watch() reads SQLite and computes result", () => {
       autoRollback: false,
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
-    } as unknown as WatchOptions);
+    });
 
     // Regression should be detected
     expect(result.snapshot.regression_detected).toBe(true);
@@ -449,7 +448,7 @@ describe("integration: watch() reads SQLite and computes result", () => {
       autoRollback: false,
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
-    } as unknown as WatchOptions);
+    });
 
     // No regression: 0.8 >= 0.8 - 0.1 = 0.7
     expect(result.snapshot.regression_detected).toBe(false);
@@ -499,13 +498,10 @@ describe("integration: watch() reads SQLite and computes result", () => {
     const auditLogPath = writeJsonl(auditEntries, "autoroll-audit.jsonl");
 
     // Track rollback invocation via dependency injection
-    let rollbackCalledWith: Record<string, unknown> | null = null;
-    const mockRollback = async (opts: {
-      skillName: string;
-      skillPath: string;
-      proposalId?: string;
-    }) => {
-      rollbackCalledWith = opts;
+    type Rollback = NonNullable<WatchOptions["_rollbackFn"]>;
+    const rollbackCalls: Parameters<Rollback>[0][] = [];
+    const mockRollback: Rollback = async (opts) => {
+      rollbackCalls.push(opts);
       return {
         rolledBack: true,
         restoredDescription: "Original doc-gen description",
@@ -522,14 +518,14 @@ describe("integration: watch() reads SQLite and computes result", () => {
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
       _rollbackFn: mockRollback,
-    } as unknown as WatchOptions);
+    });
 
     // Regression detected and rollback invoked
     expect(result.snapshot.regression_detected).toBe(true);
     expect(result.alert).not.toBeNull();
     expect(result.rolledBack).toBe(true);
-    expect(rollbackCalledWith).not.toBeNull();
-    expect((rollbackCalledWith as unknown as Record<string, unknown>).skillName).toBe("doc-gen");
+    expect(rollbackCalls).toHaveLength(1);
+    expect(rollbackCalls[0]?.skillName).toBe("doc-gen");
     expect(result.recommendation.toLowerCase()).toContain("rolled back");
   });
 
@@ -562,7 +558,7 @@ describe("integration: watch() reads SQLite and computes result", () => {
       autoRollback: false,
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
-    } as unknown as WatchOptions);
+    });
 
     expect(result.snapshot.skill_checks).toBe(0);
     expect(result.snapshot.pass_rate).toBe(0);

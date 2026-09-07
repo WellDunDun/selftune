@@ -82,7 +82,7 @@ describe("selftune improve", () => {
   });
 
   test("delegates package scope into search-run and preserves package-evaluator flags", async () => {
-    let delegatedArgv: string[] | null = null;
+    const delegatedInvocations: string[][] = [];
 
     process.argv = ["bun", "improve.ts"];
     await runImprove(
@@ -103,13 +103,13 @@ describe("selftune improve", () => {
       ],
       {
         searchRunCliMain: async () => {
-          delegatedArgv = [...process.argv];
+          delegatedInvocations.push([...process.argv]);
         },
       },
     );
 
-    expect(delegatedArgv).not.toBeNull();
-    expect(delegatedArgv).toEqual([
+    expect(delegatedInvocations).toHaveLength(1);
+    expect(delegatedInvocations[0]).toEqual([
       "bun",
       "improve.ts",
       "--skill",
@@ -124,19 +124,20 @@ describe("selftune improve", () => {
   });
 
   test("adds --apply-winner for package scope when dry-run is not requested", async () => {
-    let delegatedArgv: string[] | null = null;
+    const delegatedInvocations: string[][] = [];
 
     process.argv = ["bun", "improve.ts"];
     await runImprove(
       ["--skill", "code-review", "--skill-path", "/tmp/code-review/SKILL.md", "--scope", "package"],
       {
         searchRunCliMain: async () => {
-          delegatedArgv = [...process.argv];
+          delegatedInvocations.push([...process.argv]);
         },
       },
     );
 
-    expect(delegatedArgv).toEqual([
+    expect(delegatedInvocations).toHaveLength(1);
+    expect(delegatedInvocations[0]).toEqual([
       "bun",
       "improve.ts",
       "--skill",
@@ -148,7 +149,7 @@ describe("selftune improve", () => {
   });
 
   test("auto-selects package search for draft packages even without --scope package", async () => {
-    let delegatedArgv: string[] | null = null;
+    const delegatedInvocations: string[][] = [];
     tempRoot = mkdtempSync(join(tmpdir(), "selftune-improve-auto-"));
     const skillDir = join(tempRoot, "research-assistant");
     mkdirSync(skillDir, { recursive: true });
@@ -160,12 +161,13 @@ describe("selftune improve", () => {
       ["--skill", "research-assistant", "--skill-path", join(skillDir, "SKILL.md")],
       {
         searchRunCliMain: async () => {
-          delegatedArgv = [...process.argv];
+          delegatedInvocations.push([...process.argv]);
         },
       },
     );
 
-    expect(delegatedArgv).toEqual([
+    expect(delegatedInvocations).toHaveLength(1);
+    expect(delegatedInvocations[0]).toEqual([
       "bun",
       "improve.ts",
       "--skill",

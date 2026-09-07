@@ -1,6 +1,6 @@
 import type { DashboardOperationError } from "./dashboard-operations.js";
 
-export function dashboardCorsHeaders(): Record<string, string> {
+export function dashboardCorsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, PATCH, POST, OPTIONS",
@@ -21,17 +21,12 @@ export function withDashboardCors(response: Response): Response {
 }
 
 export function dashboardOperationErrorResponse(error: DashboardOperationError): Response {
+  const detail = { code: error.code, message: error.message, retryable: error.retryable };
+  const guidance = error.suggestion ? { ...detail, suggestion: error.suggestion } : detail;
+  const failures = error.failures ? { ...guidance, failures: error.failures } : guidance;
+  const progress = error.progress ? { ...failures, progress: error.progress } : failures;
   return Response.json(
-    {
-      error: {
-        code: error.code,
-        message: error.message,
-        ...(error.suggestion ? { suggestion: error.suggestion } : {}),
-        retryable: error.retryable,
-        ...(error.failures ? { failures: error.failures } : {}),
-        ...(error.progress ? { progress: error.progress } : {}),
-      },
-    },
+    { error: progress },
     { status: error.status, headers: dashboardCorsHeaders() },
   );
 }

@@ -1,4 +1,9 @@
 #!/usr/bin/env bun
+import {
+  decodeSkillUsageLine,
+  decodeQueryLogLine,
+  decodeSessionTelemetryLine,
+} from "../utils/log-contracts.js";
 /**
  * hooks-to-evals.ts
  *
@@ -129,7 +134,6 @@ export function buildEvalSet(
   // Build set of positive query texts (for exclusion from negatives)
   const positiveQueries = new Set<string>();
   for (const r of actionableSkillRecords) {
-    if (!r || typeof r.skill_name !== "string" || typeof r.query !== "string") continue;
     if (isHighConfidencePositiveSkillRecord(r, skillName)) {
       const q = extractPositiveEvalQueryText(r.query, skillName);
       if (q) {
@@ -142,7 +146,6 @@ export function buildEvalSet(
   const seen = new Set<string>();
   const positives: EvalEntry[] = [];
   for (const r of actionableSkillRecords) {
-    if (!r || typeof r.skill_name !== "string" || typeof r.query !== "string") continue;
     if (!isHighConfidencePositiveSkillRecord(r, skillName)) continue;
     const q = extractPositiveEvalQueryText(r.query, skillName);
     if (!q || seen.has(q)) continue;
@@ -166,8 +169,7 @@ export function buildEvalSet(
     const negCandidates: string[] = [];
     const negSeen = new Set<string>();
     for (const r of actionableQueryRecords) {
-      if (!r || typeof r.query !== "string") continue;
-      const q = (r.query ?? "").trim();
+      const q = r.query.trim();
       if (!q || positiveQueries.has(q) || negSeen.has(q)) continue;
       negSeen.add(q);
       negCandidates.push(q);
@@ -481,14 +483,14 @@ export async function runEvalGenerate(input: EvalGenerateInput): Promise<void> {
   });
   const db = hasCustomSkillLog && hasCustomQueryLog && hasCustomTelemetryLog ? undefined : getDb();
   skillRecords = hasCustomSkillLog
-    ? readJsonl<SkillUsageRecord>(skillLogPath)
-    : (querySkillUsageRecords(db!) as SkillUsageRecord[]);
+    ? readJsonl(skillLogPath, decodeSkillUsageLine)
+    : querySkillUsageRecords(db ?? getDb());
   queryRecords = hasCustomQueryLog
-    ? readJsonl<QueryLogRecord>(queryLogPath)
-    : (queryQueryLog(db!) as QueryLogRecord[]);
+    ? readJsonl(queryLogPath, decodeQueryLogLine)
+    : queryQueryLog(db ?? getDb());
   telemetryRecords = hasCustomTelemetryLog
-    ? readJsonl<SessionTelemetryRecord>(telemetryLogPath)
-    : (querySessionTelemetry(db!) as SessionTelemetryRecord[]);
+    ? readJsonl(telemetryLogPath, decodeSessionTelemetryLine)
+    : querySessionTelemetry(db ?? getDb());
   emitDashboardStepProgress({
     current: 1,
     total: values.blend ? 5 : 3,

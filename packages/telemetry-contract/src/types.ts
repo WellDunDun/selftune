@@ -1,3 +1,5 @@
+import type { z } from "zod";
+
 export const CANONICAL_SCHEMA_VERSION = "2.0" as const;
 export type CanonicalSchemaVersion = typeof CANONICAL_SCHEMA_VERSION;
 
@@ -59,7 +61,7 @@ export interface CanonicalRawSourceRef extends Record<string, unknown> {
   line?: number;
   event_type?: string;
   raw_id?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, z.core.util.JSONType>;
 }
 
 export interface CanonicalRecordBase extends Record<string, unknown> {

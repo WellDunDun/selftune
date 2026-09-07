@@ -10,10 +10,29 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
 
 import { getDb } from "./localdb/db.js";
 import { queryEvolutionAudit, queryQueryLog, querySkillUsageRecords } from "./localdb/queries.js";
 import type { ActivationContext, ActivationRule } from "./types.js";
+
+const decodeSessionGrade = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({
+      session_id: Schema.String,
+      summary: Schema.optionalKey(Schema.Struct({ pass_rate: Schema.Number })),
+    }),
+  ),
+);
+const decodeRegression = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({
+      regression_detected: Schema.Boolean,
+      skill_name: Schema.optionalKey(Schema.String),
+    }),
+  ),
+);
 
 // ---------------------------------------------------------------------------
 // Rule: post-session diagnostic
@@ -27,7 +46,7 @@ const postSessionDiagnostic: ActivationRule = {
     let queries: Array<{ session_id: string; query: string }>;
     try {
       const db = getDb();
-      queries = queryQueryLog(db) as Array<{ session_id: string; query: string }>;
+      queries = queryQueryLog(db);
     } catch {
       return null;
     }
@@ -39,9 +58,7 @@ const postSessionDiagnostic: ActivationRule = {
     let skillUsages: Array<{ session_id: string }>;
     try {
       const db = getDb();
-      skillUsages = (querySkillUsageRecords(db) as Array<{ session_id: string }>).filter(
-        (s) => s.session_id === ctx.session_id,
-      );
+      skillUsages = querySkillUsageRecords(db).filter((s) => s.session_id === ctx.session_id);
     } catch {
       return null;
     }
@@ -75,10 +92,9 @@ const gradingThresholdBreach: ActivationRule = {
 
       for (const file of files) {
         const content = readFileSync(join(gradingDir, file), "utf-8");
-        const result = JSON.parse(content) as {
-          session_id: string;
-          summary?: { pass_rate: number };
-        };
+        const decoded = decodeSessionGrade(content);
+        if (Option.isNone(decoded)) continue;
+        const result = decoded.value;
 
         if (result.session_id === ctx.session_id && result.summary) {
           if (result.summary.pass_rate < 0.6) {
@@ -109,7 +125,7 @@ const staleEvolution: ActivationRule = {
     let auditEntries: Array<{ timestamp: string; action: string }>;
     try {
       const db = getDb();
-      auditEntries = queryEvolutionAudit(db) as Array<{ timestamp: string; action: string }>;
+      auditEntries = queryEvolutionAudit(db);
     } catch {
       return null;
     }
@@ -157,11 +173,7 @@ const regressionDetected: ActivationRule = {
     if (!existsSync(snapshotPath)) return null;
 
     try {
-      const snapshot = JSON.parse(readFileSync(snapshotPath, "utf-8")) as {
-        regression_detected: boolean;
-        skill_name?: string;
-        pass_rate?: number;
-      };
+      const snapshot = decodeRegression(readFileSync(snapshotPath, "utf-8"));
 
       if (snapshot.regression_detected) {
         const skillInfo = snapshot.skill_name ? ` for skill "${snapshot.skill_name}"` : "";

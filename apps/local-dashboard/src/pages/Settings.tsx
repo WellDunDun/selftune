@@ -78,7 +78,7 @@ import type {
   WorkspaceMemberRole,
 } from "@/types";
 
-type ScheduleDraft = Record<DesktopScheduleJobId, { enabled: boolean; schedule: string }>;
+type ScheduleDraft = Partial<Record<DesktopScheduleJobId, { enabled: boolean; schedule: string }>>;
 type RemoteDraft = {
   destination: SyncDestination;
   url: string;
@@ -185,7 +185,7 @@ const SCHEDULE_PRESETS: Record<DesktopScheduleJobId, ScheduleOption[]> = {
 function draftFromJobs(jobs: DesktopScheduleJob[]): ScheduleDraft {
   return Object.fromEntries(
     jobs.map((job) => [job.id, { enabled: job.enabled, schedule: job.schedule }]),
-  ) as ScheduleDraft;
+  );
 }
 
 function humanizeSchedule(schedule: string): string {
@@ -405,7 +405,7 @@ export function Settings() {
   const hasChanges = useMemo(() => {
     if (!settingsQuery.data || !draft) return false;
     return settingsQuery.data.schedule.jobs.some((job) => {
-      const next = draft[job.id];
+      const next = draft[job.id] ?? job;
       return next.enabled !== job.enabled || next.schedule.trim() !== job.schedule;
     });
   }, [draft, settingsQuery.data]);
@@ -429,7 +429,7 @@ export function Settings() {
   const scheduleDraft = draft;
   const connectedCount = harnesses.filter((harness) => harness.connected).length;
   const canResetTimes = schedule.jobs.some(
-    (job) => scheduleDraft[job.id].schedule !== job.default_schedule,
+    (job) => (scheduleDraft[job.id]?.schedule ?? job.schedule) !== job.default_schedule,
   );
   const formatLabel =
     schedule.format === "launchd"
@@ -450,7 +450,8 @@ export function Settings() {
       {
         jobs: schedule.jobs.map((job) => ({
           id: job.id,
-          ...scheduleDraft[job.id],
+          enabled: scheduleDraft[job.id]?.enabled ?? job.enabled,
+          schedule: scheduleDraft[job.id]?.schedule ?? job.schedule,
         })),
       },
       {
@@ -1488,9 +1489,9 @@ export function Settings() {
                   void window.selftuneDesktop
                     ?.setBackgroundService(enabled)
                     .then(setBackgroundService)
-                    .catch((error: unknown) =>
+                    .catch((cause: unknown) =>
                       toast.error("Background service update failed", {
-                        description: error instanceof Error ? error.message : String(error),
+                        description: cause instanceof Error ? cause.message : String(cause),
                       }),
                     )
                     .finally(() => setBackgroundServicePending(false));
@@ -1538,11 +1539,11 @@ export function Settings() {
                       schedule.jobs.map((job) => [
                         job.id,
                         {
-                          enabled: scheduleDraft[job.id].enabled,
+                          enabled: scheduleDraft[job.id]?.enabled ?? job.enabled,
                           schedule: job.default_schedule,
                         },
                       ]),
-                    ) as ScheduleDraft,
+                    ),
                   )
                 }
               >
@@ -1560,7 +1561,7 @@ export function Settings() {
 
           <div className="overflow-hidden rounded-lg border border-border/70 bg-background/25">
             {schedule.jobs.map((job) => {
-              const jobDraft = draft[job.id];
+              const jobDraft = draft[job.id] ?? job;
               const scheduleOptions = optionsForJob(job, jobDraft.schedule);
               return (
                 <div
@@ -1581,7 +1582,7 @@ export function Settings() {
                             ? {
                                 ...current,
                                 [job.id]: {
-                                  ...current[job.id],
+                                  ...(current[job.id] ?? jobDraft),
                                   schedule: scheduleValue,
                                 },
                               }
@@ -1621,7 +1622,7 @@ export function Settings() {
                         current
                           ? {
                               ...current,
-                              [job.id]: { ...current[job.id], enabled },
+                              [job.id]: { ...(current[job.id] ?? jobDraft), enabled },
                             }
                           : current,
                       )

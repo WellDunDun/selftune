@@ -18,6 +18,57 @@ const capabilities = {
 };
 
 describe("browser server profiles", () => {
+  it("discards malformed saved rows without losing valid profiles or capability flags", () => {
+    const controller = createBrowserServerProfileController({
+      origin: "https://app.selftune.dev",
+      capabilities,
+      load: () =>
+        JSON.stringify([
+          null,
+          { id: 42, kind: "selfhost" },
+          {
+            id: "selfhost:team",
+            kind: "selfhost",
+            name: "Team",
+            origin: "https://team.example.com",
+            capabilities: { analytics: false, registry: "invalid", futureFeature: true },
+            credential: "must-not-persist",
+          },
+        ]),
+      persist: () => {},
+      clearHostState: () => {},
+      navigation: { mode: "same_window", navigate: () => {} },
+      fetch: async () => new Response(null, { status: 200 }),
+    });
+    expect(controller.snapshot().profiles).toHaveLength(2);
+    expect(
+      controller.snapshot().profiles.find((profile) => profile.id === "selfhost:team")
+        ?.capabilities,
+    ).toEqual({ ...capabilities, analytics: false });
+    expect(JSON.stringify(controller.snapshot())).not.toContain("must-not-persist");
+    controller.reconcileExternal("not json");
+    controller.reconcileExternal("{}");
+    expect(controller.snapshot().profiles).toHaveLength(2);
+  });
+
+  it.each([
+    null,
+    [],
+    { schema_version: 1 },
+    {
+      schema_version: 1,
+      host: "cloud",
+      profile: {
+        id: "cloud:selftune",
+        name: " ",
+        origin: "https://app.selftune.dev",
+        authentication: "cookie",
+      },
+    },
+  ])("rejects a malformed runtime profile", (value) => {
+    expect(() => decodeServerRuntimeProfile(value)).toThrow();
+  });
+
   it("keeps the built-in SelfTune Cloud profile during multitab reconciliation", () => {
     const controller = createBrowserServerProfileController({
       origin: "https://app.selftune.dev",

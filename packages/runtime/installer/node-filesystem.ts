@@ -15,6 +15,7 @@ import {
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 import {
   InstallerMaterializationError,
@@ -77,7 +78,7 @@ async function pathKind(
     if (stat.isFile()) return "file";
     return "special";
   } catch (cause) {
-    if (typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT") {
+    if (Schema.is(Schema.Struct({ code: Schema.Literal("ENOENT") }))(cause)) {
       return "missing";
     }
     throw cause;

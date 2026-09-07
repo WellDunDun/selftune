@@ -38,11 +38,7 @@ export interface RunVerifyDeps {
 
 const MAX_AUTO_FIX_ITERATIONS = 4;
 
-function runSelftuneSubCommand(command: string[]): {
-  exitCode: number | null;
-  stdout: string;
-  stderr: string;
-} {
+function runSelftuneSubCommand(command: string[]) {
   const indexPath = resolveSelftuneCliEntrypoint();
   const result = Bun.spawnSync(["bun", "run", indexPath, ...command], {
     stdout: "pipe",

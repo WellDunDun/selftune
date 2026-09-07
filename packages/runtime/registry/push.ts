@@ -5,7 +5,6 @@ import { RegistryLookupResponse, RegistryMutationResponse } from "./contracts.js
 import { RegistryPlatform, type PreparedRegistryPush } from "./platform.js";
 import {
   failure,
-  json,
   RegistryOperationError,
   success,
   type RegistryProgramInput,
@@ -20,7 +19,9 @@ function requestFailure(prepared: PreparedRegistryPush, message: string): Regist
   return {
     operation: "push",
     stdout: [progress(prepared)],
-    stderr: [json({ error: message, guidance: { next_command: "selftune registry list" } })],
+    stderr: [
+      JSON.stringify({ error: message, guidance: { next_command: "selftune registry list" } }),
+    ],
     exitCode: 1,
   };
 }
@@ -78,7 +79,7 @@ export const runRegistryPush = Effect.fn("selftune.registry.push")(function* (
   return success(
     "push",
     progress(prepared),
-    json({
+    JSON.stringify({
       success: true,
       name: prepared.name,
       version: prepared.version,

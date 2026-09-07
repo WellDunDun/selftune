@@ -23,26 +23,24 @@ import type {
 export function computeInvocationScores(
   perEntryResults: Array<{ entry: { invocation_type?: InvocationType }; after_pass: boolean }>,
 ): InvocationTypeScores {
-  const dims: InvocationType[] = ["explicit", "implicit", "contextual", "negative"];
-  const counts: Record<string, { passed: number; total: number }> = {};
-
-  for (const dim of dims) {
-    counts[dim] = { passed: 0, total: 0 };
-  }
+  const scores: InvocationTypeScores = {
+    explicit: { passed: 0, total: 0, pass_rate: 0 },
+    implicit: { passed: 0, total: 0, pass_rate: 0 },
+    contextual: { passed: 0, total: 0, pass_rate: 0 },
+    negative: { passed: 0, total: 0, pass_rate: 0 },
+  };
 
   for (const r of perEntryResults) {
     const type = r.entry.invocation_type ?? "implicit";
-    counts[type].total++;
-    if (r.after_pass) counts[type].passed++;
+    scores[type].total++;
+    if (r.after_pass) scores[type].passed++;
   }
 
-  const result: Record<string, { passed: number; total: number; pass_rate: number }> = {};
-  for (const dim of dims) {
-    const { passed, total } = counts[dim];
-    result[dim] = { passed, total, pass_rate: total > 0 ? passed / total : 0 };
+  for (const score of Object.values(scores)) {
+    score.pass_rate = score.total > 0 ? score.passed / score.total : 0;
   }
 
-  return result as unknown as InvocationTypeScores;
+  return scores;
 }
 
 // ---------------------------------------------------------------------------
@@ -278,11 +276,7 @@ Output ONLY valid JSON with:
  * Select the best candidate from a Pareto frontier.
  * Returns the best single candidate and whether a merge should be attempted.
  */
-export function selectFromFrontier(frontier: ParetoCandidate[]): {
-  best: ParetoCandidate;
-  shouldMerge: boolean;
-  mergePrompt: string | null;
-} {
+export function selectFromFrontier(frontier: ParetoCandidate[]) {
   if (frontier.length === 0) {
     throw new Error("Cannot select from empty frontier");
   }

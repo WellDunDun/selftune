@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { analyzeComposability } from "../../packages/runtime/eval/composability.js";
 import type { SessionTelemetryRecord } from "../../packages/runtime/types.js";
+import { openDb } from "@selftune/local-store";
+import { querySessionTelemetry } from "../../packages/runtime/localdb/queries.js";
 
 // ---------------------------------------------------------------------------
 // Helper to build minimal SessionTelemetryRecord fixtures
@@ -147,18 +149,16 @@ describe("analyzeComposability", () => {
     expect(report.conflict_count).toBe(0);
   });
 
-  test("handles sessions with missing skills_triggered", () => {
-    const telemetry = [
-      makeSession("s1", ["pptx"], 0),
-      // Simulated malformed record (null skills_triggered)
-      {
-        ...makeSession("s2", [], 0),
-        skills_triggered: null as unknown as string[],
-      },
-    ];
-    const report = analyzeComposability("pptx", telemetry);
-    // Should not crash; malformed record is filtered out
-    expect(report.total_sessions_analyzed).toBe(1);
+  test("handles persisted sessions with missing skills_triggered", () => {
+    const database = openDb(":memory:");
+    try {
+      database.run(`INSERT INTO session_telemetry (session_id, timestamp, skills_triggered_json, errors_encountered)
+        VALUES ('s1', '2025-01-01T00:00:00Z', '["pptx"]', 0), ('s2', '2025-01-01T00:00:00Z', 'null', 0)`);
+      const report = analyzeComposability("pptx", querySessionTelemetry(database));
+      expect(report.total_sessions_analyzed).toBe(1);
+    } finally {
+      database.close();
+    }
   });
 
   test("co_occurrence_count is correct", () => {
@@ -209,7 +209,7 @@ describe("analyzeComposability", () => {
   test("report includes generated_at timestamp", () => {
     const report = analyzeComposability("pptx", []);
     expect(report.generated_at).toBeDefined();
-    expect(typeof report.generated_at).toBe("string");
+    expect(report.generated_at).toBeString();
     // Should be valid ISO date
     expect(Number.isNaN(Date.parse(report.generated_at))).toBe(false);
   });

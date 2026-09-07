@@ -196,6 +196,27 @@ describe("readAlphaIdentity / writeAlphaIdentity", () => {
     expect(readAlphaIdentity(configPath)).toBeNull();
   });
 
+  test.each(
+    [null, [], { enrolled: "yes" }, { ...makeIdentity(), user_id: 42 }].map((alpha) => ({ alpha })),
+  )("rejects a malformed alpha record without changing the file: %j", ({ alpha }) => {
+    const bytes = JSON.stringify({ alpha });
+    writeFileSync(configPath, bytes);
+    expect(readAlphaIdentity(configPath)).toBeNull();
+    expect(readFileSync(configPath, "utf8")).toBe(bytes);
+  });
+
+  test("replaces malformed legacy identity while retaining partial configuration", () => {
+    writeFileSync(configPath, JSON.stringify({ cli_path: "/legacy/cli", alpha: 42 }));
+    const identity = makeIdentity();
+    writeAlphaIdentity(configPath, identity);
+    expect(readAlphaIdentity(configPath)).toEqual(identity);
+    expect(JSON.parse(readFileSync(configPath, "utf8"))).toMatchObject({
+      cli_path: "/legacy/cli",
+      agent_type: "unknown",
+      hooks_installed: false,
+    });
+  });
+
   test("reads back identity after write", () => {
     const credentials = new Map<string, string>();
     const credentialStore: PlatformCredentialStore = {

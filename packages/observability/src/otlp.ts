@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import OtlpRoot from "@opentelemetry/otlp-transformer/build/src/generated/root.js";
+import { flow } from "effect";
 
 import { LocalTelemetryBatch } from "./trace-batch.js";
+import { logExportCodec, traceExportCodec } from "./otlp-codec.js";
 
 const MAX_GROUPS = 64;
 const MAX_SIGNALS = 512;
@@ -15,6 +16,11 @@ const MAX_VALUE_DEPTH = 8;
 
 const OtlpSignal = Schema.Literals(["traces", "logs"]);
 const OtlpEncoding = Schema.Literals(["json", "protobuf"]);
+const OtlpEnvelope = Schema.Struct({
+  signal: Schema.String,
+  encoding: Schema.String,
+  payload: Schema.Unknown,
+});
 
 /** Versioned, transport-neutral OTLP receiver input. */
 export class OtlpExportRequest extends Schema.Class<OtlpExportRequest>("OtlpExportRequest")({
@@ -49,70 +55,80 @@ export class OtlpDecodeFailure extends Schema.TaggedErrorClass<OtlpDecodeFailure
   },
 ) {}
 
-type OtlpRoot = {
-  opentelemetry: {
-    proto: {
-      collector: {
-        trace: { v1: { ExportTraceServiceRequest: OtlpMessageType } };
-        logs: { v1: { ExportLogsServiceRequest: OtlpMessageType } };
-      };
-    };
-  };
-};
-type OtlpMessageType = {
-  decode(input: Uint8Array): unknown;
-  fromObject(input: object): unknown;
-};
-type OtlpRecord = Record<string, unknown>;
-
-const generatedRoot = OtlpRoot as unknown as OtlpRoot;
+type OtlpValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Uint8Array
+  | OtlpValue[]
+  | OtlpRecord;
+type OtlpRecord = { [key: string]: OtlpValue };
+const OtlpValue: Schema.Codec<OtlpValue> = Schema.suspend(() =>
+  Schema.Union([
+    Schema.String,
+    Schema.Number,
+    Schema.Boolean,
+    Schema.Null,
+    Schema.Undefined,
+    Schema.Uint8Array,
+    Schema.mutable(Schema.Array(OtlpValue)),
+    Schema.Record(Schema.String, OtlpValue),
+  ]),
+);
+const OtlpRecord = Schema.Record(Schema.String, OtlpValue);
+const decodeRecord = Schema.decodeUnknownSync(OtlpRecord);
+const isRecord = Schema.is(OtlpRecord);
+const isText = Schema.is(Schema.String);
+const isFiniteNumber = Schema.is(Schema.Number.check(Schema.isFinite()));
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 const fail = (reason: OtlpDecodeFailure["reason"], message: string) =>
   Effect.fail(OtlpDecodeFailure.make({ reason, message }));
 
-const stableHash = (domain: string, value: unknown) =>
-  createHash("sha256").update(domain).update(canonicalJson(value)).digest("hex");
+const stableHash = (domain: string, value: OtlpRecord) =>
+  createHash("sha256").update(domain).update(canonicalRecord(value)).digest("hex");
 
-const canonicalJson = (value: unknown): string => {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
+const canonicalJson = (value: OtlpValue): string | undefined => {
   if (value instanceof Uint8Array) return JSON.stringify(Buffer.from(value).toString("hex"));
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  return `{${Object.keys(value as OtlpRecord)
+  if (!isRecord(value)) return JSON.stringify(value);
+  return canonicalRecord(value);
+};
+
+const canonicalRecord = (value: OtlpRecord): string => {
+  return `{${Object.keys(value)
     .toSorted()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson((value as OtlpRecord)[key])}`)
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
     .join(",")}}`;
 };
 
-const record = (value: unknown): OtlpRecord | undefined =>
-  value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as OtlpRecord)
-    : undefined;
-const array = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
-const string = (value: unknown): string | undefined =>
-  typeof value === "string" ? value : undefined;
-const number = (value: unknown): number | undefined =>
-  typeof value === "number" && Number.isFinite(value) ? value : undefined;
+const record = (value: OtlpValue): OtlpRecord | undefined => (isRecord(value) ? value : undefined);
+const array = (value: OtlpValue): OtlpValue[] => (Array.isArray(value) ? value : []);
+const string = (value: OtlpValue): string | undefined => (isText(value) ? value : undefined);
+const number = (value: OtlpValue): number | undefined =>
+  isFiniteNumber(value) ? value : undefined;
 
-const bytesToHex = (value: unknown): string | undefined => {
+const bytesToHex = (value: OtlpValue): string | undefined => {
   if (value instanceof Uint8Array) return Buffer.from(value).toString("hex");
   if (value === "") return "";
-  if (typeof value === "string" && /^[0-9a-f]+$/i.test(value)) return value.toLowerCase();
+  if (isText(value) && /^[0-9a-f]+$/i.test(value)) return value.toLowerCase();
   return undefined;
 };
 
-const compact = <T extends OtlpRecord>(value: T): T =>
-  Object.fromEntries(Object.entries(value).filter(([, child]) => child !== undefined)) as T;
+const compact = (value: OtlpRecord): OtlpRecord =>
+  Object.fromEntries(Object.entries(value).filter(([, child]) => child !== undefined));
 
-const validId = (value: unknown, length: number) => {
+const validId = (value: OtlpValue, length: number) => {
   const id = bytesToHex(value);
   return id !== undefined && id.length === length && !/^0+$/.test(id) ? id : undefined;
 };
 
-const decimal = (value: unknown): string | undefined => {
-  if (typeof value === "string" && /^\d+$/.test(value)) return value;
-  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return String(value);
+const decimal = (value: OtlpValue): string | undefined => {
+  if (isText(value) && /^\d+$/.test(value)) return value;
+  if (isFiniteNumber(value) && Number.isSafeInteger(value) && value >= 0) return String(value);
   const item = record(value);
   if (item && number(item.low) !== undefined && number(item.high) !== undefined) {
     return String((BigInt(number(item.high)!) << 32n) + BigInt(number(item.low)! >>> 0));
@@ -120,7 +136,7 @@ const decimal = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const timestamp = (value: unknown): string | undefined => {
+const timestamp = (value: OtlpValue): string | undefined => {
   const nanos = decimal(value);
   if (!nanos || BigInt(nanos) === 0n) return undefined;
   try {
@@ -130,13 +146,13 @@ const timestamp = (value: unknown): string | undefined => {
   }
 };
 
-const checkValue = (value: unknown, depth = 0): OtlpDecodeFailure | undefined => {
+const checkValue = (value: OtlpValue, depth = 0): OtlpDecodeFailure | undefined => {
   if (depth > MAX_VALUE_DEPTH)
     return OtlpDecodeFailure.make({
       reason: "over_limit",
       message: "OTLP value nesting exceeds 8",
     });
-  if (typeof value === "string" && encoder.encode(value).byteLength > MAX_VALUE_BYTES) {
+  if (isText(value) && encoder.encode(value).byteLength > MAX_VALUE_BYTES) {
     return OtlpDecodeFailure.make({
       reason: "over_limit",
       message: "OTLP attribute value exceeds 4 KiB",
@@ -165,11 +181,11 @@ const checkValue = (value: unknown, depth = 0): OtlpDecodeFailure | undefined =>
 };
 
 const decodeAttributes = (
-  value: unknown,
-): Effect.Effect<Map<string, unknown>, OtlpDecodeFailure> => {
+  value: OtlpValue,
+): Effect.Effect<Map<string, OtlpValue>, OtlpDecodeFailure> => {
   const values = array(value);
   if (values.length > MAX_ATTRIBUTES) return fail("over_limit", "OTLP attributes exceed 64");
-  const result = new Map<string, unknown>();
+  const result = new Map<string, OtlpValue>();
   for (const item of values) {
     const attribute = record(item);
     const key = attribute && string(attribute.key);
@@ -181,12 +197,12 @@ const decodeAttributes = (
   return Effect.succeed(result);
 };
 
-const attributeString = (attributes: Map<string, unknown>, key: string): string | undefined => {
+const attributeString = (attributes: Map<string, OtlpValue>, key: string): string | undefined => {
   const value = record(attributes.get(key));
   const result = value && string(value.stringValue);
   return result && result.length > 0 && result.length <= 256 ? result : undefined;
 };
-const attributeCount = (attributes: Map<string, unknown>, key: string): number => {
+const attributeCount = (attributes: Map<string, OtlpValue>, key: string): number => {
   const value = record(attributes.get(key));
   const integer = value && decimal(value.intValue);
   if (integer) {
@@ -197,7 +213,7 @@ const attributeCount = (attributes: Map<string, unknown>, key: string): number =
   return floating !== undefined && Number.isInteger(floating) && floating >= 0 ? floating : 0;
 };
 
-const platformFrom = (attributes: Map<string, unknown>) => {
+const platformFrom = (attributes: Map<string, OtlpValue>) => {
   const platform = attributeString(attributes, "selftune.platform");
   return platform === "claude_code" ||
     platform === "codex" ||
@@ -207,7 +223,7 @@ const platformFrom = (attributes: Map<string, unknown>) => {
     ? platform
     : "otlp";
 };
-const linkKind = (attributes: Map<string, unknown>) => {
+const linkKind = (attributes: Map<string, OtlpValue>) => {
   const kind = attributeString(attributes, "selftune.link.kind");
   return kind === "replay_of" ||
     kind === "evaluation_of" ||
@@ -218,7 +234,7 @@ const linkKind = (attributes: Map<string, unknown>) => {
 };
 
 /** OTLP JSON permits hexadecimal trace/span identifiers while protobufjs expects bytes/base64. */
-const prepareJsonIds = (value: unknown): unknown => {
+const prepareJsonIds = (value: OtlpValue): OtlpValue => {
   if (Array.isArray(value)) return value.map(prepareJsonIds);
   const item = record(value);
   if (!item) return value;
@@ -228,7 +244,7 @@ const prepareJsonIds = (value: unknown): unknown => {
         key === "traceId" ? 32 : key === "spanId" || key === "parentSpanId" ? 16 : 0;
       if (
         expectedLength > 0 &&
-        typeof child === "string" &&
+        isText(child) &&
         new RegExp(`^[0-9a-fA-F]{${expectedLength}}$`).test(child)
       ) {
         return [key, Buffer.from(child, "hex").toString("base64")];
@@ -241,24 +257,19 @@ const prepareJsonIds = (value: unknown): unknown => {
 const decodePayload = (
   request: OtlpExportRequest,
 ): Effect.Effect<OtlpRecord, OtlpDecodeFailure> => {
-  const type =
-    request.signal === "traces"
-      ? generatedRoot.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest
-      : generatedRoot.opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest;
+  const type = request.signal === "traces" ? traceExportCodec : logExportCodec;
   try {
     if (request.encoding === "protobuf") {
       if (!(request.payload instanceof Uint8Array))
         return fail("invalid_payload", "protobuf OTLP payload must be Uint8Array");
-      return Effect.succeed(type.decode(request.payload) as OtlpRecord);
+      return Effect.succeed(decodeRecord(type.decode(request.payload)));
     }
-    const json =
-      typeof request.payload === "string"
-        ? JSON.parse(request.payload)
-        : request.payload instanceof Uint8Array
-          ? JSON.parse(decoder.decode(request.payload))
-          : request.payload;
-    if (!record(json)) return fail("malformed_json", "JSON OTLP payload must be an object");
-    return Effect.succeed(type.fromObject(prepareJsonIds(json) as object) as OtlpRecord);
+    const json = isText(request.payload)
+      ? decodeRecord(JSON.parse(request.payload))
+      : request.payload instanceof Uint8Array
+        ? decodeRecord(JSON.parse(decoder.decode(request.payload)))
+        : decodeRecord(request.payload);
+    return Effect.succeed(decodeRecord(type.fromObject(decodeRecord(prepareJsonIds(json)))));
   } catch (error) {
     return fail(
       request.encoding === "protobuf" ? "malformed_protobuf" : "malformed_json",
@@ -267,33 +278,17 @@ const decodePayload = (
   }
 };
 
-/** Decode official OTLP JSON/protobuf and produce bounded, metadata-only local facts. */
-export const normalizeOtlpExport = (
-  input: unknown,
+const normalizeDecodedExport = (
+  envelope: typeof OtlpEnvelope.Type,
 ): Effect.Effect<NormalizedOtlpExport, OtlpDecodeFailure> =>
   Effect.gen(function* () {
-    const envelope = record(input);
-    if (
-      envelope &&
-      typeof envelope.signal === "string" &&
-      envelope.signal !== "traces" &&
-      envelope.signal !== "logs"
-    )
+    if (envelope.signal !== "traces" && envelope.signal !== "logs")
       return yield* fail("unsupported_signal", `unsupported OTLP signal: ${envelope.signal}`);
-    if (
-      envelope &&
-      typeof envelope.encoding === "string" &&
-      envelope.encoding !== "json" &&
-      envelope.encoding !== "protobuf"
-    )
+    if (envelope.encoding !== "json" && envelope.encoding !== "protobuf")
       return yield* fail("unsupported_encoding", `unsupported OTLP encoding: ${envelope.encoding}`);
-    const request = yield* Schema.decodeUnknownEffect(OtlpExportRequest)(input).pipe(
+    const request = yield* Schema.decodeUnknownEffect(OtlpExportRequest)(envelope).pipe(
       Effect.catchTag("SchemaError", (error) => fail("invalid_payload", error.message)),
     );
-    if (request.signal !== "traces" && request.signal !== "logs")
-      return yield* fail("unsupported_signal", "unsupported OTLP signal");
-    if (request.encoding !== "json" && request.encoding !== "protobuf")
-      return yield* fail("unsupported_encoding", "unsupported OTLP encoding");
     const decoded = yield* decodePayload(request);
     const groups = array(decoded[request.signal === "traces" ? "resourceSpans" : "resourceLogs"]);
     if (groups.length > MAX_GROUPS)
@@ -301,9 +296,9 @@ export const normalizeOtlpExport = (
 
     const resourcesById = new Map<string, OtlpRecord>();
     const scopesById = new Map<string, OtlpRecord>();
-    const spans: unknown[] = [];
-    const logs: unknown[] = [];
-    const span_links: unknown[] = [];
+    const spans: OtlpRecord[] = [];
+    const logs: OtlpRecord[] = [];
+    const span_links: OtlpRecord[] = [];
     const spanIdentities = new Set<string>();
     const spanLinkIdentities = new Set<string>();
     let signalCount = 0;
@@ -578,3 +573,12 @@ export const normalizeOtlpExport = (
     }).pipe(Effect.catchTag("SchemaError", (error) => fail("invalid_payload", error.message)));
     return NormalizedOtlpExport.make({ batch, source_revision });
   });
+
+/** Decode official OTLP JSON/protobuf and produce bounded, metadata-only local facts. */
+export const normalizeOtlpExport = flow(
+  Schema.decodeUnknownEffect(OtlpEnvelope),
+  Effect.mapError((error) =>
+    OtlpDecodeFailure.make({ reason: "invalid_payload", message: error.message }),
+  ),
+  Effect.flatMap(normalizeDecodedExport),
+);

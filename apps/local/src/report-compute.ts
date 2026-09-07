@@ -7,26 +7,26 @@ import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import { resolveSelftunePaths } from "@selftune/config";
 
-export type DashboardReportName = "portfolio-audit" | "skill-intelligence" | "insights" | "library";
-
-export interface ReportComputeStoragePaths {
-  readonly configRoot: string;
-  readonly localDatabasePath: string;
-  readonly localAnalyticsPath: string;
-}
-
-export interface ReportComputeOptions {
-  readonly configRoot?: string | undefined;
-  readonly searchDirs?: string[] | undefined;
-  readonly quarantineRoot?: string | undefined;
-  /**
-   * Resolved by the host before spawning. The worker must never infer storage
-   * ownership from its own ambient environment.
-   */
-  readonly storagePaths?: ReportComputeStoragePaths | undefined;
-}
+import {
+  decodeReportOutput,
+  ReportComputeError,
+  type DashboardReportName,
+  type DashboardReportPayloads,
+  type ReportComputeOptions,
+  type ReportComputeStoragePaths,
+} from "./report-contract.js";
+export type {
+  DashboardReportName,
+  ReportComputeOptions,
+  ReportComputeStoragePaths,
+} from "./report-contract.js";
 
 const WORKER_TIMEOUT_MS = 180_000;
+
+export interface ReportWorkerProcessOptions {
+  readonly command?: readonly string[];
+  readonly timeoutMs?: number;
+}
 
 export function resolveReportComputeOptions(
   options: ReportComputeOptions,
@@ -85,13 +85,14 @@ export function reportWorkerCommand(
  * materialized cache retains its last successful artifact instead of recreating this
  * heavyweight work in the long-lived dashboard daemon.
  */
-export function computeReportInWorker<A>(
-  report: DashboardReportName,
+export function computeReportInWorker<Name extends DashboardReportName>(
+  report: Name,
   options: ReportComputeOptions,
   reportsDir: string,
-): Effect.Effect<A, Error> {
+  processOptions: ReportWorkerProcessOptions = {},
+): Effect.Effect<DashboardReportPayloads[Name], ReportComputeError> {
   const outPath = join(reportsDir, `${report}.compute-${process.pid}-${randomUUID()}.json`);
-  return computeReportInSubprocess<A>(report, options, outPath).pipe(
+  return computeReportInSubprocess(report, options, outPath, processOptions).pipe(
     Effect.ensuring(
       Effect.sync(() => {
         try {
@@ -104,14 +105,15 @@ export function computeReportInWorker<A>(
   );
 }
 
-export function computeReportInSubprocess<A>(
-  report: DashboardReportName,
+export function computeReportInSubprocess<Name extends DashboardReportName>(
+  report: Name,
   options: ReportComputeOptions,
   outPath: string,
-): Effect.Effect<A, Error> {
+  processOptions: ReportWorkerProcessOptions = {},
+): Effect.Effect<DashboardReportPayloads[Name], ReportComputeError> {
   return Effect.tryPromise({
     try: async () => {
-      const workerCommand = reportWorkerCommand();
+      const workerCommand = processOptions.command ?? reportWorkerCommand();
       const child = Bun.spawn(
         [...workerCommand, ...reportWorkerArguments(report, options, outPath)],
         {
@@ -119,22 +121,27 @@ export function computeReportInSubprocess<A>(
           stderr: "pipe",
         },
       );
-      const killTimer = setTimeout(() => child.kill(), WORKER_TIMEOUT_MS);
+      const killTimer = setTimeout(
+        () => child.kill(),
+        processOptions.timeoutMs ?? WORKER_TIMEOUT_MS,
+      );
       try {
         const [stderrText, exitCode] = await Promise.all([
           new Response(child.stderr).text(),
           child.exited,
         ]);
         if (exitCode !== 0) {
-          throw new Error(
-            `SelfTune report worker for ${report} exited with ${exitCode}: ${stderrText.slice(-500)}`,
-          );
+          throw new ReportComputeError({
+            report,
+            exitCode,
+            message: `SelfTune report worker for ${report} exited with ${exitCode}: ${stderrText.slice(-500)}`,
+          });
         }
-        return JSON.parse(await Bun.file(outPath).text()) as A;
+        return decodeReportOutput(report, await Bun.file(outPath).text());
       } finally {
         clearTimeout(killTimer);
       }
     },
-    catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+    catch: (cause) => ReportComputeError.fromCause(report, cause),
   });
 }

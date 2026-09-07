@@ -5,13 +5,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { openDb } from "../../packages/runtime/localdb/db.js";
+import type {
+  session_telemetry,
+  skill_invocations,
+  evolution_audit,
+  evolution_evidence,
+  improvement_signals,
+  orchestrate_runs,
+  queries,
+} from "../../packages/runtime/localdb/drizzle-schema.js";
 import {
   getOrchestrateRuns,
   getOverviewPayload,
   getPendingProposals,
   getSkillReportPayload,
   getSkillsList,
-  queryCanonicalRecordsForStaging,
   queryEvolutionAudit,
   queryEvolutionEvidence,
   queryImprovementSignals,
@@ -25,7 +33,10 @@ import {
 // Helpers — seed via direct SQL (isolate reads from writes)
 // ---------------------------------------------------------------------------
 
-function seedSessionTelemetry(db: Database, overrides: Record<string, unknown> = {}): void {
+function seedSessionTelemetry(
+  db: Database,
+  overrides: Partial<typeof session_telemetry.$inferInsert> = {},
+): void {
   const defaults = {
     session_id: "sess-001",
     timestamp: "2026-03-17T10:00:00Z",
@@ -74,7 +85,10 @@ function seedSessionTelemetry(db: Database, overrides: Record<string, unknown> =
 }
 
 let _seedSkillCounter = 0;
-function seedSkillUsage(db: Database, overrides: Record<string, unknown> = {}): void {
+function seedSkillUsage(
+  db: Database,
+  overrides: Partial<typeof skill_invocations.$inferInsert> & { timestamp?: string } = {},
+): void {
   _seedSkillCounter++;
   const defaults = {
     skill_invocation_id: `si-seed-${_seedSkillCounter}`,
@@ -95,7 +109,7 @@ function seedSkillUsage(db: Database, overrides: Record<string, unknown> = {}): 
   };
   // Override occurred_at with timestamp if provided in overrides for backward compat
   if (overrides.timestamp && !overrides.occurred_at) {
-    defaults.occurred_at = overrides.timestamp as string;
+    defaults.occurred_at = overrides.timestamp;
   }
   // Ensure session stub for FK satisfaction
   db.run(
@@ -128,7 +142,10 @@ function seedSkillUsage(db: Database, overrides: Record<string, unknown> = {}): 
   );
 }
 
-function seedEvolutionAudit(db: Database, overrides: Record<string, unknown> = {}): void {
+function seedEvolutionAudit(
+  db: Database,
+  overrides: Partial<typeof evolution_audit.$inferInsert> = {},
+): void {
   const defaults = {
     timestamp: "2026-03-17T10:00:00Z",
     proposal_id: "prop-001",
@@ -162,7 +179,10 @@ function seedEvolutionAudit(db: Database, overrides: Record<string, unknown> = {
   );
 }
 
-function seedEvolutionEvidence(db: Database, overrides: Record<string, unknown> = {}): void {
+function seedEvolutionEvidence(
+  db: Database,
+  overrides: Partial<typeof evolution_evidence.$inferInsert> = {},
+): void {
   const defaults = {
     timestamp: "2026-03-17T10:00:00Z",
     proposal_id: "prop-001",
@@ -203,7 +223,10 @@ function seedEvolutionEvidence(db: Database, overrides: Record<string, unknown> 
   );
 }
 
-function seedImprovementSignal(db: Database, overrides: Record<string, unknown> = {}): void {
+function seedImprovementSignal(
+  db: Database,
+  overrides: Partial<typeof improvement_signals.$inferInsert> = {},
+): void {
   const defaults = {
     timestamp: "2026-03-17T10:00:00Z",
     session_id: "sess-001",
@@ -232,7 +255,10 @@ function seedImprovementSignal(db: Database, overrides: Record<string, unknown> 
   );
 }
 
-function seedOrchestrateRun(db: Database, overrides: Record<string, unknown> = {}): void {
+function seedOrchestrateRun(
+  db: Database,
+  overrides: Partial<typeof orchestrate_runs.$inferInsert> = {},
+): void {
   const defaults = {
     run_id: "run-001",
     timestamp: "2026-03-17T10:00:00Z",
@@ -273,7 +299,7 @@ function seedOrchestrateRun(db: Database, overrides: Record<string, unknown> = {
   );
 }
 
-function seedQuery(db: Database, overrides: Record<string, unknown> = {}): void {
+function seedQuery(db: Database, overrides: Partial<typeof queries.$inferInsert> = {}): void {
   const defaults = {
     timestamp: "2026-03-17T10:00:00Z",
     session_id: "sess-001",
@@ -952,88 +978,5 @@ describe("getPendingProposals", () => {
     expect(pending).toHaveLength(1);
     expect(pending[0].proposal_id).toBe("p-pending");
     expect(pending[0].action).toBe("validated");
-  });
-});
-
-describe("queryCanonicalRecordsForStaging", () => {
-  let db: Database;
-
-  beforeEach(() => {
-    db = openDb(":memory:");
-  });
-
-  afterEach(() => {
-    db.close();
-  });
-
-  it("preserves execution_fact_id when rebuilding execution facts from SQLite", () => {
-    db.run(
-      `INSERT INTO sessions (session_id, source_session_kind, platform, schema_version, normalized_at, normalizer_version, capture_mode, raw_source_ref)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        "sess-ef",
-        "interactive",
-        "claude_code",
-        "2.0",
-        "2026-03-17T10:00:00Z",
-        "norm-1",
-        "hook",
-        JSON.stringify({ path: "/tmp/raw.jsonl" }),
-      ],
-    );
-    db.run(
-      `INSERT INTO execution_facts
-        (execution_fact_id, session_id, occurred_at, prompt_id, tool_calls_json, total_tool_calls,
-         assistant_turns, errors_encountered, schema_version, platform, normalized_at,
-         normalizer_version, capture_mode, raw_source_ref)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        "fact-stable-id",
-        "sess-ef",
-        "2026-03-17T10:05:00Z",
-        "prompt-ef",
-        JSON.stringify({ Read: 2 }),
-        2,
-        1,
-        0,
-        "2.0",
-        "claude_code",
-        "2026-03-17T10:06:00Z",
-        "norm-1",
-        "hook",
-        JSON.stringify({ path: "/tmp/raw.jsonl", line: 12 }),
-      ],
-    );
-
-    const executionFact = queryCanonicalRecordsForStaging(db).find(
-      (record) => record.record_kind === "execution_fact",
-    ) as Record<string, unknown> | undefined;
-
-    expect(executionFact).toBeDefined();
-    expect(executionFact?.execution_fact_id).toBeDefined();
-    expect(typeof executionFact?.execution_fact_id).toBe("string");
-    expect(executionFact?.execution_fact_id).toBe("fact-stable-id");
-  });
-
-  it("preserves skill path and version when rebuilding skill invocations from SQLite", () => {
-    seedSkillUsage(db, {
-      session_id: "sess-skill-path",
-      skill_invocation_id: "si-skill-path",
-      skill_name: "Research",
-      skill_path: "/skills/research/SKILL.md",
-    });
-    db.run(`UPDATE skill_invocations SET skill_version_hash = ? WHERE skill_invocation_id = ?`, [
-      "exact-skill-hash",
-      "si-skill-path",
-    ]);
-
-    const invocation = queryCanonicalRecordsForStaging(db).find(
-      (record) =>
-        record.record_kind === "skill_invocation" && record.skill_invocation_id === "si-skill-path",
-    ) as Record<string, unknown> | undefined;
-
-    expect(invocation).toBeDefined();
-    expect(invocation?.skill_path).toBe("/skills/research/SKILL.md");
-    expect(invocation?.skill_version_hash).toBe("exact-skill-hash");
   });
 });

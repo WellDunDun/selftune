@@ -78,7 +78,7 @@ describe("legacy CLI router", () => {
         expect(getLegacyCommandGroup(command)).toBe(group);
       }
     }
-    expect([...seen]).toEqual(LEGACY_COMMANDS);
+    expect([...seen]).toEqual([...LEGACY_COMMANDS]);
   });
 
   test("matches every legacy registry group to its router switch cases", () => {

@@ -23,8 +23,8 @@ const locationKey = (location: LibraryObservation): string =>
     location.projectRoot ?? "",
   ].join("\u0000");
 
-const toLocation = (observation: LibraryObservation) =>
-  LibraryLocation.make({
+const toLocation = (observation: LibraryObservation) => {
+  const location = LibraryLocation.make({
     sourceKind: observation.sourceKind,
     packagePath: observation.packagePath,
     skillPath: observation.skillPath,
@@ -37,7 +37,10 @@ const toLocation = (observation: LibraryObservation) =>
     lastUsedAt: observation.lastUsedAt,
     origin: observation.origin,
     updateStatus: observation.updateStatus,
+    instructionBytes: observation.instructionBytes,
   });
+  return observation.discovery ? { ...location, discovery: observation.discovery } : location;
+};
 
 const latestTimestamp = (values: ReadonlyArray<string | null>): string | null =>
   values
@@ -133,6 +136,10 @@ export const buildLibrarySnapshot = (
           "1970-01-01T00:00:00.000Z",
         origins,
         updateStatus: updateStatusFor(sortedObservations),
+        instructionBytes: Math.max(
+          0,
+          ...sortedObservations.map((observation) => observation.instructionBytes ?? 0),
+        ),
       });
     });
 

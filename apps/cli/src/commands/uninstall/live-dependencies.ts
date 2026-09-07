@@ -38,9 +38,14 @@ import {
   type ServiceFailure,
   ServiceManagerLive,
 } from "@selftune/local/service";
-import { isSelftuneCommand } from "@selftune/runtime/utils/hooks";
+import {
+  ClaudeCodeSettings,
+  type ClaudeCodeHookEntry,
+  isSelftuneCommand,
+} from "@selftune/runtime/utils/hooks";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 
 import { UninstallDependencies } from "./dependencies.js";
 import { uninstallCleanupFailure } from "./errors.js";
@@ -179,44 +184,53 @@ async function removeScheduling(dryRun: boolean): Promise<ScheduleRemovalResult>
   return { removed: false, details: "No scheduling artifacts found" };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isSelftuneHookEntry(entry: unknown): boolean {
-  if (!isRecord(entry)) return false;
-  if (typeof entry.command === "string") return isSelftuneCommand(entry.command);
-  if (!Array.isArray(entry.hooks)) return false;
-  return entry.hooks.some(
-    (hook) => isRecord(hook) && typeof hook.command === "string" && isSelftuneCommand(hook.command),
+function withoutSelftuneHooks(entry: ClaudeCodeHookEntry): ClaudeCodeHookEntry | null {
+  const ownCommand = entry.command !== undefined && isSelftuneCommand(entry.command);
+  const hooks = entry.hooks?.filter(
+    (hook) => hook.command === undefined || !isSelftuneCommand(hook.command),
   );
+  const nestedChanged = hooks !== undefined && hooks.length !== entry.hooks?.length;
+  if (!ownCommand && !nestedChanged) return entry;
+  const { command, ...withoutCommand } = entry;
+  const retained = ownCommand ? withoutCommand : entry;
+  if (nestedChanged && hooks) {
+    if (hooks.length === 0 && (command === undefined || ownCommand)) return null;
+    return { ...retained, hooks };
+  }
+  return ownCommand && !hooks?.length ? null : retained;
 }
 
 export function removeHooksFromSettings(dryRun: boolean, settingsPath?: string): HookRemovalResult {
   const path = settingsPath ?? CLAUDE_SETTINGS_PATH;
   if (!existsSync(path)) return { removed: 0, details: "No settings.json found" };
 
-  let settings: Record<string, unknown>;
+  let settings: ClaudeCodeSettings;
   try {
-    const parsed: unknown = JSON.parse(readFileSync(path, "utf-8"));
-    if (!isRecord(parsed)) return { removed: 0, details: "Failed to parse settings.json" };
-    settings = parsed;
+    settings = Schema.decodeUnknownSync(Schema.fromJsonString(ClaudeCodeSettings))(
+      readFileSync(path, "utf-8"),
+    );
   } catch {
     return { removed: 0, details: "Failed to parse settings.json" };
   }
 
   const hooks = settings.hooks;
-  if (!isRecord(hooks)) {
+  if (!hooks) {
     return { removed: 0, details: "No hooks section in settings.json" };
   }
 
   let totalRemoved = 0;
   for (const key of Object.keys(hooks)) {
     const entries = hooks[key];
-    if (!Array.isArray(entries)) continue;
-    const filtered = entries.filter((entry) => !isSelftuneHookEntry(entry));
+    const filtered: ClaudeCodeHookEntry[] = [];
+    let changed = 0;
+    for (const entry of entries) {
+      const retained = withoutSelftuneHooks(entry);
+      if (retained !== entry) changed += 1;
+      if (retained) filtered.push(retained);
+    }
+    if (changed === 0) continue;
     hooks[key] = filtered;
-    totalRemoved += entries.length - filtered.length;
+    totalRemoved += changed;
     if (filtered.length === 0) delete hooks[key];
   }
 

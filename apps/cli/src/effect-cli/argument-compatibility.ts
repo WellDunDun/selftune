@@ -200,20 +200,10 @@ function invalidAlphaArguments(message: string, suggestion: string): never {
   throw new CLIError(`Invalid arguments: ${message}`, "INVALID_FLAG", suggestion);
 }
 
-function validateAlphaLeafArguments(
-  subcommand: "upload" | "relink",
-  args: ReadonlyArray<string>,
-): void {
-  const allowed =
-    subcommand === "upload" ? new Set(["--dry-run", "--help", "-h"]) : new Set(["--help", "-h"]);
+function validateAlphaLeafArguments(subcommand: "relink", args: ReadonlyArray<string>): void {
+  const allowed = new Set(["--help", "-h"]);
   for (const argument of args) {
     if (allowed.has(argument)) continue;
-    if (subcommand === "upload" && argument.startsWith("--dry-run=")) {
-      invalidAlphaArguments(
-        "Option '--dry-run' does not take an argument",
-        "selftune alpha upload --help",
-      );
-    }
     const message = argument.startsWith("-")
       ? `Unknown option '${argument}'`
       : `Unexpected argument '${argument}'. This command does not take positional arguments`;
@@ -224,7 +214,7 @@ function validateAlphaLeafArguments(
 function validateAlphaArguments(args: ReadonlyArray<string>): void {
   const [subcommand, ...subcommandArgs] = args;
   if (!subcommand || subcommand === "--help" || subcommand === "-h") return;
-  if (subcommand === "upload" || subcommand === "relink") {
+  if (subcommand === "relink") {
     validateAlphaLeafArguments(subcommand, subcommandArgs);
     return;
   }

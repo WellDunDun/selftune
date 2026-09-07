@@ -1,11 +1,12 @@
 /* oxlint-disable no-await-in-loop -- relay rows transition through ordered durable states */
 import type { Database } from "bun:sqlite";
 import { loadConfigSync } from "@selftune/config";
+import * as Schema from "effect/Schema";
 
 import { resolveCloudCredential } from "./auth/cloud-credential.js";
 import { CONTRIBUTION_RELAY_ENDPOINT, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import { loadRemoteLibraryConfig } from "./remote-library-config.js";
-import type { CreatorContributionRelayPayload } from "./contribution-signals.js";
+import { CreatorContributionRelayPayload } from "./types/contribution-signals.js";
 import {
   markCreatorContributionFailed,
   markCreatorContributionSending,
@@ -32,7 +33,10 @@ export interface FlushCreatorContributionSignalsOptions {
   limit?: number;
   dryRun?: boolean;
   retryFailed?: boolean;
+  fetch?: ContributionRelayTransport;
 }
+
+type ContributionRelayTransport = (url: string, init: RequestInit) => Promise<Response>;
 
 export interface FlushCreatorContributionSignalsResult {
   endpoint: string;
@@ -45,13 +49,9 @@ export interface FlushCreatorContributionSignalsResult {
   dry_run: boolean;
 }
 
-function isAcceptedContributionResponse(
-  value: unknown,
-): value is { status: "accepted" | "duplicate" } {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return record.status === "accepted" || record.status === "duplicate";
-}
+const decodeStagedPayload = Schema.decodeUnknownSync(
+  Schema.fromJsonString(CreatorContributionRelayPayload),
+);
 
 export function resolveContributionRelayEndpoint(explicit?: string): string {
   if (explicit?.trim()) return explicit.trim();
@@ -78,9 +78,10 @@ export async function uploadContributionSignal(
   payload: CreatorContributionRelayPayload,
   endpoint: string,
   apiKey: string,
+  request: ContributionRelayTransport = fetch,
 ): Promise<ContributionRelayUploadResult> {
   try {
-    const response = await fetch(endpoint, {
+    const response = await request(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -92,16 +93,7 @@ export async function uploadContributionSignal(
     });
 
     if (response.ok || response.status === 409) {
-      const body = await response.text();
-      if (!body.trim()) return { success: true, errors: [], _status: response.status };
-      try {
-        const parsed: unknown = JSON.parse(body);
-        if (isAcceptedContributionResponse(parsed)) {
-          return { success: true, errors: [], _status: response.status };
-        }
-      } catch {
-        // Empty or non-JSON success bodies are still acceptable here.
-      }
+      await response.text();
       return { success: true, errors: [], _status: response.status };
     }
 
@@ -167,14 +159,14 @@ export async function flushCreatorContributionSignals(
 
     let payload: CreatorContributionRelayPayload;
     try {
-      payload = JSON.parse(row.payload_json) as CreatorContributionRelayPayload;
+      payload = decodeStagedPayload(row.payload_json);
     } catch {
       markCreatorContributionFailed(db, row.id, "Invalid staged creator contribution payload JSON");
       failed += 1;
       continue;
     }
 
-    const result = await uploadContributionSignal(payload, endpoint, apiKey);
+    const result = await uploadContributionSignal(payload, endpoint, apiKey, options.fetch);
     if (result.success) {
       markCreatorContributionSent(db, row.id);
       sent += 1;

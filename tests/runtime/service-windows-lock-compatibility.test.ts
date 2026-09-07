@@ -8,6 +8,7 @@ import {
   serializeWindowsMutationLockFence,
   WINDOWS_USER_SERVICE_NAMESPACE,
   WindowsServiceLockCompatibilityError,
+  WindowsServiceLockFileError,
   windowsLegacyServiceMutationLockPath,
   type WindowsServiceLockCompatibilityFileSystem,
   type WindowsServiceLockFileEvidence,
@@ -52,6 +53,7 @@ function harness(
     readonly pidInspectionFails?: boolean;
     readonly repairExclusionHeld?: boolean;
     readonly replacementFails?: boolean;
+    readonly typedFileFailures?: boolean;
   } = {},
 ) {
   const files = new Map<string, StoredFile>();
@@ -82,7 +84,10 @@ function harness(
           if (!file) throw new Error("missing source");
           files.set(destination, file);
         },
-        catch: (cause) => cause,
+        catch: (cause) =>
+          options.typedFileFailures
+            ? new WindowsServiceLockFileError({ message: "file exists", code: "EEXIST", cause })
+            : cause,
       }),
     readUtf8File: (path) => Effect.succeed(files.get(path)?.contents ?? null),
     removeFile: (path) =>
@@ -160,6 +165,54 @@ function harness(
 }
 
 describe("Windows service lock rollout compatibility", () => {
+  it("rejects extra lock fields and noncanonical fence bytes without rewriting", async () => {
+    const fence = serializeWindowsMutationLockFence(createWindowsMutationLockFence(scope));
+    for (const contents of [
+      legacyPayload().replace('"version":2', '"version":2,"extra":true'),
+      fence.replace('"version":3', '"version":3,"extra":true'),
+      fence.trimEnd(),
+      ` ${fence}`,
+      "null",
+      "[]",
+      legacyPayload().replace('"pid":303', '"pid":"303"'),
+    ]) {
+      const test = harness();
+      const path = windowsLegacyServiceMutationLockPath(scope.controlDir);
+      test.put(path, contents);
+      await expect(Effect.runPromise(test.compatibility.diagnose(scope))).resolves.toMatchObject({
+        _tag: "Refused",
+        code: "malformed",
+      });
+      expect(test.files.get(path)?.contents).toBe(contents);
+      expect(test.events).toEqual([]);
+    }
+  });
+
+  it("continues accepting whitespace in legacy payloads", async () => {
+    const test = harness();
+    test.put(windowsLegacyServiceMutationLockPath(scope.controlDir), `  ${legacyPayload()}\n`);
+    await expect(Effect.runPromise(test.compatibility.diagnose(scope))).resolves.toMatchObject({
+      _tag: "LegacyStale",
+      pid: 303,
+    });
+  });
+
+  it("recognizes EEXIST through the typed filesystem failure when another fence wins", async () => {
+    const contents = serializeWindowsMutationLockFence(createWindowsMutationLockFence(scope));
+    const test = harness({
+      typedFileFailures: true,
+      beforeLink: (files, destination) =>
+        files.set(destination, {
+          contents,
+          identity: "concurrent-fence",
+          regular: true,
+          symbolicLink: false,
+        }),
+    });
+    await Effect.runPromise(test.compatibility.ensureFence(scope));
+    expect(test.events).toEqual(["write-sync:600", "link", "remove-temp"]);
+  });
+
   it("publishes fully written exact v3 bytes before SQLite may proceed", async () => {
     const test = harness();
     const path = windowsLegacyServiceMutationLockPath(scope.controlDir);

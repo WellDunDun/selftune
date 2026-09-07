@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import type * as Schema from "effect/Schema";
+import { jsonRequest } from "../../../tests/helpers/json-request.js";
 
 import { DashboardOperations, makeDashboardOperationsLayer } from "../src/dashboard-operations.js";
 import { handleDashboardApplicationRoute } from "../src/routes/application.js";
@@ -8,20 +10,13 @@ const origin = "http://127.0.0.1:3141";
 const snapshot = { entries: [], contributions: [], installations: [] };
 
 function routeRequest(
-  runtime: ManagedRuntime.ManagedRuntime<DashboardOperations>,
+  runtime: ManagedRuntime.ManagedRuntime<DashboardOperations, never>,
   path: string,
   method: "GET" | "PATCH" | "POST" = "GET",
-  body?: unknown,
+  body?: typeof Schema.Json.Type,
   includeOrigin = true,
 ) {
-  const request = new Request(`${origin}${path}`, {
-    method,
-    headers: {
-      ...(includeOrigin ? { Origin: origin } : {}),
-      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  const request = jsonRequest(`${origin}${path}`, method, body, includeOrigin ? origin : undefined);
   return runtime.runPromise(
     handleDashboardApplicationRoute(request, new URL(request.url), {
       allowedOrigins: new Set([origin]),

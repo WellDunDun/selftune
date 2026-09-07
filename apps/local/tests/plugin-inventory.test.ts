@@ -65,6 +65,77 @@ function fixtureRuntime(calls: string[]): PluginInventoryRuntime {
 }
 
 describe("plugin inventory", () => {
+  test("malformed host envelopes report an error instead of a successful empty inventory", () => {
+    const runtime: PluginInventoryRuntime = {
+      which: (command) => `/tools/${command}`,
+      now: () => new Date("2026-09-06T00:00:00Z"),
+      run: (command) => ({
+        exitCode: 0,
+        stderr: "",
+        stdout: command.endsWith("claude") ? "{}" : "[]",
+      }),
+    };
+    const inventory = discoverPluginInventory({}, runtime);
+    expect(inventory.hosts.map((host) => host.status)).toEqual(["error", "error"]);
+    expect(inventory.totalPlugins).toBe(0);
+    expect(() =>
+      managePluginInstallation(
+        { host: "claude", pluginId: "missing", action: "remove" },
+        {},
+        runtime,
+      ),
+    ).toThrow("not installed");
+  });
+
+  test("keeps valid plugins and receipt ownership beside malformed records", () => {
+    const root = mkdtempSync(join(tmpdir(), "selftune-plugin-boundary-"));
+    try {
+      mkdirSync(join(root, "plugin-installs"));
+      writeFileSync(
+        join(root, "plugin-installs", "receipt.json"),
+        JSON.stringify({ hosts: [null, 42, { pluginId: {} }, { pluginId: "review@team" }] }),
+      );
+      const runtime: PluginInventoryRuntime = {
+        which: (command) => `/tools/${command}`,
+        now: () => new Date("2026-09-06T00:00:00Z"),
+        run: (command) => ({
+          exitCode: 0,
+          stderr: "",
+          stdout: JSON.stringify(
+            command.endsWith("claude")
+              ? [
+                  null,
+                  { id: 42 },
+                  { id: "review@team", scope: "managed", enabled: false, version: {} },
+                ]
+              : {
+                  installed: [
+                    null,
+                    { pluginId: [] },
+                    { pluginId: "review@team", version: "1", source: { source: "local" } },
+                  ],
+                },
+          ),
+        }),
+      };
+      const inventory = discoverPluginInventory({ configRoot: root }, runtime);
+      expect(inventory.hosts.map((host) => host.installedCount)).toEqual([1, 1]);
+      expect(inventory.managedPlugins).toBe(1);
+      expect(inventory.plugins[0]?.installations).toMatchObject([
+        {
+          host: "claude",
+          scope: "managed",
+          enabled: false,
+          version: null,
+          availableActions: ["update"],
+        },
+        { host: "codex", sourceType: "local", version: "1", availableActions: ["remove"] },
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("groups the same plugin across hosts and marks receipt-owned installs", () => {
     const root = mkdtempSync(join(tmpdir(), "selftune-plugin-inventory-"));
     const calls: string[] = [];

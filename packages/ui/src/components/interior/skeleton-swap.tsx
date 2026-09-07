@@ -87,7 +87,7 @@ export function SkeletonSwap({
   useEffect(() => {
     const el = shell.current;
     const inner = body.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
+    if (!el || !globalThis.ResizeObserver) return;
 
     const check = () => setScrollable(el.scrollHeight - el.clientHeight > 1);
     check();

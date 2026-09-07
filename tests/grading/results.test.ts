@@ -75,4 +75,26 @@ describe("grading result readers", () => {
     expect(results).toHaveLength(1);
     expect(results[0].skill_name).toBe("selftune");
   });
+
+  test("skips malformed artifacts without losing valid neighbors or failing the sort", () => {
+    const dir = mkdtempSync(join(tmpdir(), "selftune-grading-invalid-"));
+    tempDirs.push(dir);
+    const valid = makeResult();
+    writeFileSync(join(dir, "result-valid.json"), JSON.stringify(valid));
+    const invalidArtifacts = [
+      "{",
+      "null",
+      JSON.stringify({ session_id: "missing-time", skill_name: "selftune" }),
+      JSON.stringify({ ...valid, graded_at: 42 }),
+      JSON.stringify({ ...valid, summary: { pass_rate: "not a number" } }),
+      JSON.stringify({
+        ...valid,
+        execution_metrics: { ...valid.execution_metrics, total_steps: "many" },
+      }),
+    ];
+    invalidArtifacts.forEach((contents, index) => {
+      writeFileSync(join(dir, `result-invalid-${index}.json`), contents);
+    });
+    expect(readGradingResults(dir)).toEqual([valid]);
+  });
 });

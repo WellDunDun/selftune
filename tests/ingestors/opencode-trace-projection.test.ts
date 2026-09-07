@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import assert from "node:assert/strict";
 
 import { buildLocalTelemetryBatchFromOpenCode } from "@selftune/harness-opencode/ingestors/opencode-trace-projection";
 import { deriveSkillInvocationId } from "@selftune/runtime/normalization";
@@ -40,6 +41,7 @@ describe("buildLocalTelemetryBatchFromOpenCode", () => {
       input_tokens: 12,
       output_tokens: 8,
     });
+    assert(batch.links);
     expect(batch.links.map((link) => link.skill_invocation_id)).toEqual([
       deriveSkillInvocationId("open-code-session", "diagnose", 0),
       deriveSkillInvocationId("open-code-session", "review", 1),

@@ -82,14 +82,14 @@ const runCommand = Effect.fn("SelfTune.PackageSmoke.runCommand")(function* (
 const decode = Effect.fn("SelfTune.PackageSmoke.decode")(function* <S extends Schema.Top>(
   operation: string,
   schema: S,
-  input: unknown,
+  input: string,
 ) {
-  return yield* Schema.decodeUnknownEffect(schema)(input).pipe(
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(input).pipe(
     Effect.mapError((cause) => failure(operation, cause)),
   );
 });
 
-function packageInventory(root: string): { entries: string[]; unpackedBytes: number } {
+function packageInventory(root: string) {
   const entries: string[] = [];
   let unpackedBytes = 0;
   const visit = (directory: string): void => {
@@ -118,7 +118,7 @@ const makeTemporaryRoot = Effect.acquireRelease(
 const program = Effect.scoped(
   Effect.gen(function* () {
     const manifestInput = yield* Effect.try({
-      try: () => JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")),
+      try: () => readFileSync(join(repositoryRoot, "package.json"), "utf8"),
       catch: (cause) => failure("read package manifest", cause),
     });
     const manifest = yield* decode("decode package manifest", PackageManifest, manifestInput);
@@ -175,9 +175,13 @@ const program = Effect.scoped(
     const packageRoot = join(extractionRoot, "package");
     const packedManifest = yield* Effect.try({
       try: () =>
-        JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as {
-          dependencies?: Record<string, string>;
-        },
+        Schema.decodeUnknownSync(
+          Schema.fromJsonString(
+            Schema.Struct({
+              dependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+            }),
+          ),
+        )(readFileSync(join(packageRoot, "package.json"), "utf8")),
       catch: (cause) => failure("read packed package manifest", cause),
     });
     const leakedWorkspaceDependency = Object.keys(packedManifest.dependencies ?? {}).find((name) =>
@@ -364,11 +368,7 @@ if (!existsSync(databasePath) || statSync(databasePath).size === 0) {
       consumerRoot,
       isolatedEnvironment,
     );
-    const daemonInput = yield* Effect.try({
-      try: () => JSON.parse(daemon.stdout),
-      catch: (cause) => failure("parse packed daemon status", cause),
-    });
-    yield* decode("decode packed daemon status", DaemonStatus, daemonInput);
+    yield* decode("decode packed daemon status", DaemonStatus, daemon.stdout);
 
     process.stdout.write(
       `SelfTune package smoke passed: ${packedBytes} packed bytes, ${inventory.unpackedBytes} unpacked bytes, ${inventory.entries.length} files.\n`,

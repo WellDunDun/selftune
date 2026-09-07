@@ -20,16 +20,14 @@ import type {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeScores(
-  overrides: Partial<Record<string, { passed: number; total: number; pass_rate: number }>> = {},
-): InvocationTypeScores {
+function makeScores(overrides: Partial<InvocationTypeScores> = {}): InvocationTypeScores {
   return {
     explicit: { passed: 5, total: 10, pass_rate: 0.5 },
     implicit: { passed: 5, total: 10, pass_rate: 0.5 },
     contextual: { passed: 5, total: 10, pass_rate: 0.5 },
     negative: { passed: 5, total: 10, pass_rate: 0.5 },
     ...overrides,
-  } as InvocationTypeScores;
+  };
 }
 
 function makeCandidate(

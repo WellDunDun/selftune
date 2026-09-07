@@ -86,10 +86,7 @@ function normalizedSignals(
 export function deriveSkillExecutionPatterns(input: {
   installedSkills: ReadonlyArray<SkillIntelligenceInstalledSkill>;
   traceSignals?: ReadonlyArray<SkillTraceSignal>;
-}): {
-  trace_signals: SkillTraceSignal[];
-  execution_patterns: SkillExecutionPattern[];
-} {
+}) {
   const skillsById = activeSkillsById(input.installedSkills);
   const trace_signals = normalizedSignals(input.traceSignals ?? [], skillsById);
   const execution_patterns: SkillExecutionPattern[] = trace_signals.flatMap((signal) => {

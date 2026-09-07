@@ -36,7 +36,7 @@ export const rawSourceRefSchema = z.object({
   line: z.number().int().nonnegative().optional(),
   event_type: z.string().optional(),
   raw_id: z.string().optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  metadata: z.record(z.string(), z.json()).optional(),
 });
 
 export const canonicalRecordBaseSchema = z.object({

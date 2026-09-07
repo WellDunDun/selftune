@@ -15,6 +15,10 @@ import {
   getSkillsList,
 } from "../../packages/runtime/localdb/queries.js";
 import { ALL_DDL } from "@selftune/local-store/legacy-schema";
+import type {
+  evolution_audit,
+  evolution_evidence,
+} from "../../packages/runtime/localdb/drizzle-schema.js";
 
 // ---------------------------------------------------------------------------
 // Schema tests
@@ -33,8 +37,10 @@ describe("localdb schema", () => {
 
   it("creates all expected tables", () => {
     const tables = db
-      .query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-      .all() as Array<{ name: string }>;
+      .query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
+      )
+      .all();
     const names = tables.map((t) => t.name);
 
     expect(names).toContain("sessions");
@@ -55,23 +61,23 @@ describe("localdb schema", () => {
   });
 
   it("creates queries table with expected columns", () => {
-    const cols = db.query("PRAGMA table_info(queries)").all() as Array<{ name: string }>;
+    const cols = db.query<{ name: string }, []>("PRAGMA table_info(queries)").all();
     const names = cols.map((c) => c.name);
     expect(names).toEqual(expect.arrayContaining(["timestamp", "session_id", "query"]));
   });
 
   it("creates improvement_signals table with expected columns", () => {
-    const cols = db.query("PRAGMA table_info(improvement_signals)").all() as Array<{
-      name: string;
-    }>;
+    const cols = db.query<{ name: string }, []>("PRAGMA table_info(improvement_signals)").all();
     const names = cols.map((c) => c.name);
     expect(names).toEqual(expect.arrayContaining(["timestamp", "session_id", "signal_type"]));
   });
 
   it("creates indexes on session_id and timestamp columns", () => {
     const indexes = db
-      .query("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'")
-      .all() as Array<{ name: string }>;
+      .query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'",
+      )
+      .all();
     const names = indexes.map((i) => i.name);
 
     expect(names).toContain("idx_prompts_session");
@@ -104,8 +110,10 @@ describe("localdb schema", () => {
 
   it("creates UNIQUE dedup indexes for materializer idempotency", () => {
     const indexes = db
-      .query("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%dedup'")
-      .all() as Array<{ name: string }>;
+      .query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%dedup'",
+      )
+      .all();
     const names = indexes.map((i) => i.name);
 
     expect(names).toContain("idx_skill_usage_dedup");
@@ -121,10 +129,10 @@ describe("localdb schema", () => {
       db.run(ddl);
     }
     // If we get here without error, it's idempotent
-    const tables = db.query("SELECT COUNT(*) as c FROM sqlite_master WHERE type='table'").get() as {
-      c: number;
-    };
-    expect(tables.c).toBeGreaterThan(0);
+    const tables = db
+      .query<{ c: number }, []>("SELECT COUNT(*) as c FROM sqlite_master WHERE type='table'")
+      .get();
+    expect(tables?.c).toBeGreaterThan(0);
   });
 });
 
@@ -182,8 +190,9 @@ describe("localdb materialization", () => {
       ["sess-1", "2026-03-12T10:00:00Z", 5, 0, '["Research"]', 3, 1000, "hello"],
     );
 
-    const count = (db.query("SELECT COUNT(*) as c FROM session_telemetry").get() as { c: number })
-      .c;
+    const count = db
+      .query<{ c: number }, []>("SELECT COUNT(*) as c FROM session_telemetry")
+      .get()?.c;
     expect(count).toBe(1);
   });
 
@@ -225,8 +234,9 @@ describe("localdb materialization", () => {
       ],
     );
 
-    const count = (db.query("SELECT COUNT(*) as c FROM skill_invocations").get() as { c: number })
-      .c;
+    const count = db
+      .query<{ c: number }, []>("SELECT COUNT(*) as c FROM skill_invocations")
+      .get()?.c;
     expect(count).toBe(2);
   });
 
@@ -243,7 +253,7 @@ describe("localdb materialization", () => {
       ["sess-1", "claude_code", "2.0", "2026-03-12T10:00:00Z"],
     );
 
-    const count = (db.query("SELECT COUNT(*) as c FROM sessions").get() as { c: number }).c;
+    const count = db.query<{ c: number }, []>("SELECT COUNT(*) as c FROM sessions").get()?.c;
     expect(count).toBe(1);
   });
 
@@ -259,7 +269,7 @@ describe("localdb materialization", () => {
       ["2026-03-12T10:05:00Z", "prop-1", "Research", "validated", "Passed gates"],
     );
 
-    const count = (db.query("SELECT COUNT(*) as c FROM evolution_audit").get() as { c: number }).c;
+    const count = db.query<{ c: number }, []>("SELECT COUNT(*) as c FROM evolution_audit").get()?.c;
     expect(count).toBe(2);
   });
 
@@ -288,11 +298,11 @@ describe("localdb materialization", () => {
     );
 
     const row = db
-      .query("SELECT validation_json FROM evolution_evidence WHERE proposal_id = ?")
-      .get("prop-1") as { validation_json: string };
-    const parsed = JSON.parse(row.validation_json);
-    expect(parsed.improved).toBe(true);
-    expect(parsed.net_change).toBe(0.2);
+      .query<Pick<typeof evolution_evidence.$inferSelect, "validation_json">, [string]>(
+        "SELECT validation_json FROM evolution_evidence WHERE proposal_id = ?",
+      )
+      .get("prop-1");
+    expect(row?.validation_json).toBe(validation);
   });
 });
 
@@ -445,9 +455,11 @@ describe("writeEvolutionAuditToDb iterations_used", () => {
     expect(ok).toBe(true);
 
     const row = db
-      .query("SELECT iterations_used FROM evolution_audit WHERE proposal_id = ?")
-      .get("prop-iter-1") as { iterations_used: number | null };
-    expect(row.iterations_used).toBe(3);
+      .query<Pick<typeof evolution_audit.$inferSelect, "iterations_used">, [string]>(
+        "SELECT iterations_used FROM evolution_audit WHERE proposal_id = ?",
+      )
+      .get("prop-iter-1");
+    expect(row?.iterations_used).toBe(3);
   });
 
   it("stores null when iterations_used is omitted", () => {
@@ -461,9 +473,11 @@ describe("writeEvolutionAuditToDb iterations_used", () => {
     expect(ok).toBe(true);
 
     const row = db
-      .query("SELECT iterations_used FROM evolution_audit WHERE proposal_id = ?")
-      .get("prop-iter-2") as { iterations_used: number | null };
-    expect(row.iterations_used).toBeNull();
+      .query<Pick<typeof evolution_audit.$inferSelect, "iterations_used">, [string]>(
+        "SELECT iterations_used FROM evolution_audit WHERE proposal_id = ?",
+      )
+      .get("prop-iter-2");
+    expect(row?.iterations_used).toBeNull();
   });
 });
 

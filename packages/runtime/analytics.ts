@@ -21,10 +21,10 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { arch, platform, release } from "node:os";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
 
 import { SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import { findSelftunePackageRoot } from "./package-root.js";
-import type { SelftuneConfig } from "./types.js";
 import { CLIError } from "./utils/cli-error.js";
 
 // ---------------------------------------------------------------------------
@@ -48,18 +48,24 @@ function getVersion(): string {
 // Cached config — read once per process, shared across all functions
 // ---------------------------------------------------------------------------
 
-let cachedConfig: SelftuneConfig | null | undefined;
+const AnalyticsConfig = Schema.Struct({
+  analytics_disabled: Schema.optionalKey(Schema.Boolean),
+  agent_type: Schema.optionalKey(Schema.String),
+});
+let cachedConfig: typeof AnalyticsConfig.Type | null | undefined;
 
-function loadConfig(): SelftuneConfig | null {
+function loadConfig(): typeof AnalyticsConfig.Type | null {
   if (cachedConfig !== undefined) return cachedConfig;
   try {
     if (existsSync(SELFTUNE_CONFIG_PATH)) {
-      cachedConfig = JSON.parse(readFileSync(SELFTUNE_CONFIG_PATH, "utf-8")) as SelftuneConfig;
+      cachedConfig = Schema.decodeUnknownSync(Schema.fromJsonString(AnalyticsConfig))(
+        readFileSync(SELFTUNE_CONFIG_PATH, "utf-8"),
+      );
     } else {
       cachedConfig = null;
     }
   } catch {
-    cachedConfig = null;
+    cachedConfig = { analytics_disabled: true };
   }
   return cachedConfig;
 }
@@ -185,7 +191,7 @@ export function buildEvent(
   properties: Record<string, string | number | boolean> = {},
 ): AnalyticsEvent {
   const config = loadConfig();
-  const agentType: SelftuneConfig["agent_type"] = config?.agent_type ?? "unknown";
+  const agentType = config?.agent_type ?? "unknown";
   const osCtx = getOsContext();
 
   return {
@@ -212,7 +218,10 @@ export function buildEvent(
 export function trackEvent(
   eventName: string,
   properties: Record<string, string | number | boolean> = {},
-  options?: { endpoint?: string; fetchFn?: typeof fetch },
+  options?: {
+    endpoint?: string;
+    fetchFn?: (url: string, init: RequestInit) => Promise<Response>;
+  },
 ): void {
   if (!isAnalyticsEnabled()) return;
 
@@ -242,24 +251,24 @@ export function trackEvent(
 // CLI: selftune telemetry [status|enable|disable]
 // ---------------------------------------------------------------------------
 
-function writeConfigField(field: keyof SelftuneConfig, value: unknown): void {
-  let config: Record<string, unknown> = {};
-  try {
-    if (existsSync(SELFTUNE_CONFIG_PATH)) {
-      config = JSON.parse(readFileSync(SELFTUNE_CONFIG_PATH, "utf-8"));
-    }
-  } catch {
-    // start fresh
-  }
-  config[field] = value;
+function writeAnalyticsDisabled(disabled: boolean): void {
+  const config = existsSync(SELFTUNE_CONFIG_PATH)
+    ? Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(
+        readFileSync(SELFTUNE_CONFIG_PATH, "utf-8"),
+      )
+    : {};
   mkdirSync(SELFTUNE_CONFIG_DIR, { recursive: true });
-  writeFileSync(SELFTUNE_CONFIG_PATH, JSON.stringify(config, null, 2), "utf-8");
+  writeFileSync(
+    SELFTUNE_CONFIG_PATH,
+    JSON.stringify({ ...config, analytics_disabled: disabled }, null, 2),
+    "utf-8",
+  );
   invalidateConfigCache();
 }
 
 export function disableTelemetry(): void {
   try {
-    writeConfigField("analytics_disabled", true);
+    writeAnalyticsDisabled(true);
   } catch {
     throw new CLIError(
       "Failed to disable telemetry: cannot write ~/.selftune/config.json",
@@ -273,7 +282,7 @@ export function disableTelemetry(): void {
 
 export function enableTelemetry(): void {
   try {
-    writeConfigField("analytics_disabled", false);
+    writeAnalyticsDisabled(false);
   } catch {
     throw new CLIError(
       "Failed to enable telemetry: cannot write ~/.selftune/config.json",

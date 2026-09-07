@@ -3,6 +3,8 @@ import { userInfo } from "node:os";
 import { win32 } from "node:path";
 
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Context from "effect/Context";
 
 import { serviceProgramArguments } from "../../service-definition.js";
 import {
@@ -12,24 +14,31 @@ import {
   type WindowsServiceBackend,
 } from "../../service-contract.js";
 import {
-  makeWindowsServiceInstallationController,
+  WindowsInstallationController,
+  makeWindowsInstallationControllerLayer,
   type WindowsServiceInstallationControllerDependencies,
   type WindowsServiceInstallationPlan,
 } from "./installation/controller.js";
 import type { WindowsServiceInstallationEvidence } from "./installation/contract.js";
 import {
-  makeLiveWindowsServiceInstallationArtifactStore,
-  makeLiveWindowsServiceInstallationStore,
+  WindowsInstallationArtifacts,
+  WindowsInstallationArtifactsLive,
+  makeLiveWindowsInstallationStoreLayer,
 } from "./installation/live.js";
 import {
-  makeLiveWindowsUserServiceMutationLock,
+  WindowsMutationLock,
+  WindowsMutationLockLive,
   type WindowsUserServiceMutationLock,
 } from "./mutation-lock.js";
 import {
-  makeLiveWindowsServiceLockCompatibility,
+  WindowsLockCompatibility,
+  WindowsLockCompatibilityLive,
   type WindowsServiceLockCompatibility,
 } from "./lock-compatibility.js";
-import type { WindowsServiceInstallationStoreWithUserControl } from "./installation/store.js";
+import {
+  WindowsInstallationStore,
+  type WindowsServiceInstallationStoreWithUserControl,
+} from "./installation/store.js";
 import { sha256Hex, type WindowsServiceInstallationReceipt } from "./installation/model.js";
 import {
   generateWindowsDaemonWrapper,
@@ -42,7 +51,11 @@ import {
   type WindowsLegacyUserIdentity,
   WINDOWS_TASK_NAME,
 } from "./installation/definition.js";
-import { makeWindowsTaskScheduler, windowsSystemExecutable } from "./scheduler.js";
+import {
+  WindowsTaskSchedulers,
+  makeWindowsTaskSchedulersLayer,
+  windowsSystemExecutable,
+} from "./scheduler.js";
 import type { WindowsRuntimeAuthorization } from "./runtime/contract.js";
 import { windowsStatusFromEvidence } from "./status.js";
 import type { ServiceProcessResult } from "../../service-process.js";
@@ -50,6 +63,11 @@ import type { ServiceProcessResult } from "../../service-process.js";
 const WINDOWS_ARTIFACT_MODE = "utf8";
 
 export type WindowsServiceBackendPlan = WindowsServiceInstallationPlan;
+
+export class WindowsBackendProvider extends Context.Service<
+  WindowsBackendProvider,
+  WindowsServiceBackend
+>()("SelfTune/WindowsBackend") {}
 
 export type WindowsServiceAuthorization =
   | { readonly _tag: "Absent" }
@@ -119,7 +137,7 @@ function legacyArtifactPaths(configDir: string) {
 
 function liveLegacyUser(): WindowsLegacyUserIdentity {
   return {
-    ...(process.env.USERDOMAIN ? { domain: process.env.USERDOMAIN } : {}),
+    domain: process.env.USERDOMAIN || undefined,
     username: userInfo().username,
   };
 }
@@ -183,7 +201,7 @@ export function makeWindowsServiceInstallationPlan(
   return {
     artifactPaths: (installId) => artifactPaths(descriptor.configDir, installId),
     encodeTaskDefinition: (xml) => Buffer.from(`\ufeff${xml}`, "utf16le"),
-    ...(legacy === undefined ? {} : { legacy }),
+    legacy,
     receipt: {
       boot: descriptor.boot,
       configDir: descriptor.configDir,
@@ -296,10 +314,19 @@ function mapControllerFailure<A>(
   );
 }
 
-export function makeWindowsServiceBackend(
+export function makeWindowsServiceBackendLayer(dependencies: WindowsServiceBackendDependencies) {
+  const controller = makeWindowsInstallationControllerLayer(dependencies);
+  return Layer.effect(WindowsBackendProvider)(
+    Effect.gen(function* () {
+      return makeWindowsServiceBackend(dependencies, yield* WindowsInstallationController);
+    }),
+  ).pipe(Layer.provide(controller));
+}
+
+function makeWindowsServiceBackend(
   dependencies: WindowsServiceBackendDependencies,
+  controller: WindowsInstallationController["Service"],
 ): WindowsServiceBackend {
-  const controller = makeWindowsServiceInstallationController(dependencies);
   const planFor = (descriptor: ServiceDescriptor) =>
     makeWindowsServiceInstallationPlan(descriptor, {
       legacyUser: dependencies.legacyUser,
@@ -380,30 +407,41 @@ export function makeWindowsServiceBackend(
   };
 }
 
-export function makeLiveWindowsServiceBackend(
-  options: LiveWindowsServiceBackendOptions,
-): WindowsServiceBackend {
-  const store = makeLiveWindowsServiceInstallationStore({
+export function makeLiveWindowsServiceBackendLayer(options: LiveWindowsServiceBackendOptions) {
+  const storeLayer = makeLiveWindowsInstallationStoreLayer({
     process: { execute: options.run },
     systemRoot: options.systemRoot,
   });
-  const lockCompatibility = makeLiveWindowsServiceLockCompatibility();
-  return makeWindowsServiceBackend({
-    artifacts: makeLiveWindowsServiceInstallationArtifactStore(),
-    legacyUser: liveLegacyUser(),
-    lockCompatibility,
-    mutationLock: makeLiveWindowsUserServiceMutationLock(lockCompatibility),
-    prepareDirectories: options.prepareDirectories,
-    schedulerFor: (taskName) =>
-      makeWindowsTaskScheduler({
-        execute: options.run,
-        makeFailure: serviceFailure,
-        systemRoot: options.systemRoot,
-        taskName,
-      }),
-    store,
+  const schedulerLayer = makeWindowsTaskSchedulersLayer({
+    execute: options.run,
     systemRoot: options.systemRoot,
   });
+  const locks = WindowsMutationLockLive.pipe(Layer.provideMerge(WindowsLockCompatibilityLive));
+  const dependencies = Layer.mergeAll(
+    storeLayer,
+    schedulerLayer,
+    locks,
+    WindowsInstallationArtifactsLive,
+  );
+  return Layer.unwrap(
+    Effect.gen(function* () {
+      const artifacts = yield* WindowsInstallationArtifacts;
+      const lockCompatibility = yield* WindowsLockCompatibility;
+      const mutationLock = yield* WindowsMutationLock;
+      const store = yield* WindowsInstallationStore;
+      const schedulers = yield* WindowsTaskSchedulers;
+      return makeWindowsServiceBackendLayer({
+        artifacts,
+        legacyUser: liveLegacyUser(),
+        lockCompatibility,
+        mutationLock,
+        prepareDirectories: options.prepareDirectories,
+        schedulerFor: schedulers.forTask,
+        store,
+        systemRoot: options.systemRoot,
+      });
+    }),
+  ).pipe(Layer.provide(dependencies));
 }
 
 export type { WindowsServiceBackend } from "../../service-contract.js";

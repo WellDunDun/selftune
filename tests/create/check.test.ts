@@ -77,7 +77,7 @@ metadata:
       validateAgentSkill: passingSpecValidation,
       getTestingReadiness: () => ({
         skill_name: "research-assistant",
-        eval_readiness: "ready",
+        eval_readiness: "cold_start_ready",
         next_step: "generate_evals",
         summary: "No evals yet.",
         recommended_command: "selftune eval generate --skill research-assistant",
@@ -168,7 +168,7 @@ description: >
       validateAgentSkill: passingSpecValidation,
       getTestingReadiness: () => ({
         skill_name: "release-note-writer",
-        eval_readiness: "ready",
+        eval_readiness: "log_ready",
         next_step: "deploy_candidate",
         summary: "Ready to deploy.",
         recommended_command: "selftune evolve --skill release-note-writer",
@@ -231,7 +231,7 @@ description: >
       validateAgentSkill: passingSpecValidation,
       getTestingReadiness: () => ({
         skill_name: "qa-helper",
-        eval_readiness: "ready",
+        eval_readiness: "cold_start_ready",
         next_step: "run_replay_dry_run",
         summary: "Replay missing.",
         recommended_command: "ignored",
@@ -265,7 +265,7 @@ description: >
       validateAgentSkill: passingSpecValidation,
       getTestingReadiness: () => ({
         skill_name: "qa-helper",
-        eval_readiness: "ready",
+        eval_readiness: "cold_start_ready",
         next_step: "measure_baseline",
         summary: "Baseline missing.",
         recommended_command: "ignored",

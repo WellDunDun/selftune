@@ -106,6 +106,10 @@ selftune ingest codex
 Reads from `$CODEX_HOME/sessions/` directory. Expects the Codex rollout
 JSONL format. See `references/logs.md` for the Codex rollout format.
 
+Rollout fields are decoded before query and metric extraction. Malformed optional
+fields do not discard valid sibling evidence; malformed command exit statuses
+remain errors. Original rollout files are not rewritten.
+
 ### Output
 
 Writes to:
@@ -183,6 +187,9 @@ Writes to:
   error state; embedded diffs, file bodies, images, and tool output do not enter the trace importer.
 - Sessions are materialized in bounded chunks, and unchanged databases use a fingerprint fast path.
 - Legacy JSON session stores remain supported.
+- OpenCode message fields are decoded before ingestion. Malformed messages or
+  optional fields do not discard valid sibling evidence; source databases and
+  JSON files are opened read-only and are not repaired in place.
 
 ### Steps
 
@@ -271,6 +278,10 @@ selftune ingest pi
 
 Reads from `~/.pi/agent/sessions/`. Each session file contains Pi agent
 conversation history in JSONL format.
+
+Headers, tree edges, messages, and metrics are validated before use. Cyclic trees
+stop without producing a complete timing interval. Malformed optional fields do
+not discard valid sibling evidence. Source files are not rewritten.
 
 Skill discovery includes Pi's global `~/.pi/agent/skills/` registry and compatible
 project-local registries. Real Pi `read` tool calls to `SKILL.md` are correlated with

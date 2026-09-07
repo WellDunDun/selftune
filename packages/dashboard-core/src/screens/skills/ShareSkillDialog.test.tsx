@@ -25,12 +25,20 @@ const skill: LibrarySkillModel = {
   revisionHashes: ["a".repeat(64)],
 };
 
-function action(execute: ReturnType<typeof vi.fn>): NonNullable<DashboardLibraryActions["share"]> {
+function action(
+  execute: Extract<
+    NonNullable<DashboardLibraryActions["share"]>,
+    { access: "available" }
+  >["execute"],
+): NonNullable<DashboardLibraryActions["share"]> {
   return { access: "available", execute };
 }
 
 function managedCloudAction(
-  execute: ReturnType<typeof vi.fn>,
+  execute: Extract<
+    NonNullable<DashboardLibraryActions["share"]>,
+    { access: "available" }
+  >["execute"],
 ): Extract<NonNullable<DashboardLibraryActions["share"]>, { access: "available" }> {
   return {
     access: "available",

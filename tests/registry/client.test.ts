@@ -225,6 +225,45 @@ describe("RegistryClient", () => {
     expect(requests).toBe(0);
   });
 
+  test.each([200, 204, 205])(
+    "retains empty successful response compatibility for HTTP %s",
+    async (status) => {
+      const configPath = makeConfig();
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const client = yield* RegistryClient;
+          return yield* client.request(Schema.Struct({}), { method: "POST", path: "/entry" });
+        }).pipe(
+          Effect.provide(
+            testLayer(configPath, () => new Response(status === 200 ? "" : null, { status })),
+          ),
+        ),
+      );
+      expect(result).toEqual({});
+    },
+  );
+
+  test.each(["{broken", "null", '{"entries":[42]}'])(
+    "classifies invalid JSON responses without losing HTTP status: %s",
+    async (body) => {
+      const configPath = makeConfig();
+      const failure = await Effect.runPromise(
+        Effect.gen(function* () {
+          const client = yield* RegistryClient;
+          return yield* client.request(Schema.Struct({ entries: Schema.Array(Schema.String) }), {
+            method: "GET",
+            path: "",
+          });
+        }).pipe(
+          Effect.provide(testLayer(configPath, () => new Response(body, { status: 201 }))),
+          Effect.flip,
+        ),
+      );
+      expect(failure).toBeInstanceOf(RegistryResponseDecodeError);
+      expect(failure).toMatchObject({ status: 201 });
+    },
+  );
+
   test("returns typed HTTP and response decoding failures", async () => {
     const configPath = makeConfig();
     const schema = Schema.Struct({ entries: Schema.Array(Schema.String) });

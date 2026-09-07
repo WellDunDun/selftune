@@ -21,7 +21,7 @@ function stableTelemetryId(label: string, ...parts: readonly string[]): string {
 }
 
 function sourceCount(value: number | undefined): number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
+  return value !== undefined && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
 }
 
 function emptyBatch(batchId: string): LocalTelemetryBatch {
@@ -91,7 +91,7 @@ export function buildLocalTelemetryBatchFromSession(session: ParsedSession): Loc
     startedAt,
     endedAt,
   ).slice(0, 16);
-  const span = LocalTelemetrySpan.make({
+  const sourceSpan = {
     trace_id: traceId,
     span_id: spanId,
     name: "invoke_agent claude_code",
@@ -103,12 +103,14 @@ export function buildLocalTelemetryBatchFromSession(session: ParsedSession): Loc
     capture_mode: "transcript",
     source_authority: "source_truth",
     source_id: sourceId,
-    ...(session.metrics.model ? { model: session.metrics.model } : {}),
     input_tokens: sourceCount(session.metrics.input_tokens),
     output_tokens: sourceCount(session.metrics.output_tokens),
     error_count: sourceCount(session.metrics.errors_encountered),
     tool_call_count: sourceCount(session.metrics.total_tool_calls),
-  });
+  } satisfies LocalTelemetrySpan;
+  const span = LocalTelemetrySpan.make(
+    session.metrics.model ? { ...sourceSpan, model: session.metrics.model } : sourceSpan,
+  );
 
   return LocalTelemetryBatch.make({
     schema_version: "1.0.0",

@@ -12,6 +12,7 @@
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { loadConfigSync } from "@selftune/config";
+import * as Schema from "effect/Schema";
 
 import { resolveCloudCredential } from "../auth/cloud-credential.js";
 import { DEFAULT_CLOUD_API_URL } from "../auth/device-code.js";
@@ -24,23 +25,24 @@ import { getSelftuneVersion } from "../utils/selftune-meta.js";
 // Types
 // ---------------------------------------------------------------------------
 
-interface ProposalRecord {
-  id: string;
-  skill_id: string;
-  skill_name: string;
-  proposal_type: string;
-  current_value: string;
-  proposed_value: string;
-  reason: string | null;
-  pass_rate_before: number | null;
-  projected_pass_rate: number | null;
-  status: "pending" | "approved" | "rejected" | "applied";
-  proposed_by: string;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  applied_at: string | null;
-  created_at: string;
-}
+const ProposalRecord = Schema.Struct({
+  id: Schema.String,
+  skill_id: Schema.String,
+  skill_name: Schema.String,
+  proposal_type: Schema.String,
+  current_value: Schema.String,
+  proposed_value: Schema.String,
+  reason: Schema.NullOr(Schema.String),
+  pass_rate_before: Schema.NullOr(Schema.Number),
+  projected_pass_rate: Schema.NullOr(Schema.Number),
+  status: Schema.Literals(["pending", "approved", "rejected", "applied"]),
+  proposed_by: Schema.String,
+  reviewed_by: Schema.NullOr(Schema.String),
+  reviewed_at: Schema.NullOr(Schema.String),
+  applied_at: Schema.NullOr(Schema.String),
+  created_at: Schema.String,
+});
+type ProposalRecord = typeof ProposalRecord.Type;
 
 // ---------------------------------------------------------------------------
 // Cloud API helpers (follows registry/client.ts pattern)
@@ -88,7 +90,9 @@ async function fetchProposal(
     );
   }
 
-  const body = (await response.json()) as { proposal: ProposalRecord };
+  const body = Schema.decodeUnknownSync(Schema.Struct({ proposal: ProposalRecord }))(
+    await response.json(),
+  );
   return body.proposal;
 }
 
@@ -130,7 +134,7 @@ async function markProposalApplied(
 // Apply logic
 // ---------------------------------------------------------------------------
 
-function applyProposalToSkill(skillPath: string, proposal: ProposalRecord): { backupPath: string } {
+function applyProposalToSkill(skillPath: string, proposal: ProposalRecord) {
   if (!existsSync(skillPath)) {
     throw new CLIError(
       `Skill file not found: ${skillPath}`,

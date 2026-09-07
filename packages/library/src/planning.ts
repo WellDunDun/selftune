@@ -62,9 +62,13 @@ export function planSkillSet(
   input: { set_id: string; project_root: string; harnesses?: ReadonlyArray<string> },
   options: SkillSetServiceOptions = {},
 ): SkillSetPlan {
+  // SAFETY-TYPEOF: This exported API remains callable from JavaScript, so validate its required
+  // string fields before using string methods and preserve the documented CLI errors.
   if (!input || typeof input.set_id !== "string" || !input.set_id.trim()) {
     throw new CLIError("Skill Set ID is required.", "MISSING_FLAG");
   }
+  // SAFETY-TYPEOF: JavaScript callers also require a checked project-root string before trimming
+  // and filesystem resolution so malformed input retains the documented CLI error.
   if (typeof input.project_root !== "string" || !input.project_root.trim()) {
     throw new CLIError("Project root is required.", "MISSING_FLAG");
   }
@@ -88,8 +92,9 @@ export function planSkillManifest(
   const projectRoot = realpathSync(requestedProjectRoot);
   const operations: SkillSetPlanOperation[] = [];
 
-  const targetHarnesses = input.harnesses
-    ? manifest.harnesses.filter((harness) => input.harnesses!.includes(harness))
+  const requestedHarnesses = input.harnesses;
+  const targetHarnesses = requestedHarnesses
+    ? manifest.harnesses.filter((harness) => requestedHarnesses.includes(harness))
     : manifest.harnesses;
   for (const harness of targetHarnesses) {
     const registryPath = targetRegistryPath(projectRoot, harness);

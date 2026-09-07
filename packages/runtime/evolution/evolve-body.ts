@@ -8,6 +8,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
+import * as Schema from "effect/Schema";
 
 import { buildEvalSet } from "../eval/hooks-to-evals.js";
 import { readGradingResultsForSkill } from "../grading/results.js";
@@ -20,15 +21,14 @@ import { queryQueryLog, querySkillUsageRecords } from "../localdb/queries.js";
 import type {
   BodyEvolutionProposal,
   BodyValidationResult,
-  EvalEntry,
   EvolutionAuditEntry,
   EvolutionEvidenceEntry,
   EvolutionTarget,
   FailurePattern,
   GradingResult,
-  QueryLogRecord,
   SkillUsageRecord,
 } from "../types.js";
+import { EvalEntry } from "../types/evaluation.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import type { EffortLevel, SubagentCallOptions } from "../utils/llm-call.js";
 import { callViaSubagent, detectLlmAgent } from "../utils/llm-call.js";
@@ -43,7 +43,7 @@ import { refineBodyProposal } from "./refine-body.js";
 import type { BodyValidationOptions } from "./validate-body.js";
 import { validateBodyProposal } from "./validate-body.js";
 import { buildRuntimeReplayValidationOptions } from "./validate-host-replay.js";
-import { validateRoutingProposal } from "./validate-routing.js";
+import { validateRoutingProposal, type RoutingValidationOptions } from "./validate-routing.js";
 import { DEFAULT_VALIDATION_STRATEGY, type ValidationStrategy } from "./validation-contract.js";
 
 // ---------------------------------------------------------------------------
@@ -119,21 +119,20 @@ function createAuditEntry(
     "validation_mode" | "validation_agent" | "validation_fixture_id" | "validation_evidence_ref"
   >,
 ): EvolutionAuditEntry {
-  return {
+  const entry: EvolutionAuditEntry = {
     timestamp: new Date().toISOString(),
     proposal_id: proposalId,
     skill_name: skillName,
     action,
     details,
-    ...(provenance?.validation_mode ? { validation_mode: provenance.validation_mode } : {}),
-    ...(provenance?.validation_agent ? { validation_agent: provenance.validation_agent } : {}),
-    ...(provenance?.validation_fixture_id
-      ? { validation_fixture_id: provenance.validation_fixture_id }
-      : {}),
-    ...(provenance?.validation_evidence_ref
-      ? { validation_evidence_ref: provenance.validation_evidence_ref }
-      : {}),
   };
+  if (provenance?.validation_mode) entry.validation_mode = provenance.validation_mode;
+  if (provenance?.validation_agent) entry.validation_agent = provenance.validation_agent;
+  if (provenance?.validation_fixture_id)
+    entry.validation_fixture_id = provenance.validation_fixture_id;
+  if (provenance?.validation_evidence_ref)
+    entry.validation_evidence_ref = provenance.validation_evidence_ref;
+  return entry;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +189,7 @@ export async function evolveBody(
     _deps.readEffectiveSkillUsageRecords ??
     (() => {
       const db = getDb();
-      return querySkillUsageRecords(db) as SkillUsageRecord[];
+      return querySkillUsageRecords(db);
     });
   const _readFileSync = _deps.readFileSync ?? readFileSync;
   const _writeFileSync = _deps.writeFileSync ?? (await import("node:fs")).writeFileSync;
@@ -243,16 +242,15 @@ export async function evolveBody(
 
     // Step 2: Load eval set
     let evalSet: EvalEntry[];
-    if (evalSetPath && existsSync(evalSetPath)) {
+    if (evalSetPath) {
+      if (!existsSync(evalSetPath)) throw new Error(`Eval set not found at ${evalSetPath}`);
       const raw = _readFileSync(evalSetPath, "utf-8");
-      const parsed: unknown = JSON.parse(raw);
-      if (!Array.isArray(parsed)) {
-        throw new Error("Eval set must be a JSON array");
-      }
-      evalSet = parsed as EvalEntry[];
+      evalSet = Schema.decodeUnknownSync(
+        Schema.fromJsonString(Schema.mutable(Schema.Array(EvalEntry))),
+      )(raw);
     } else {
       const dbForQuery = getDb();
-      const queryRecords = queryQueryLog(dbForQuery) as QueryLogRecord[];
+      const queryRecords = queryQueryLog(dbForQuery);
       evalSet = _buildEvalSet(skillUsage, queryRecords, skillName);
     }
 
@@ -447,6 +445,23 @@ export async function evolveBody(
       });
       const replayFixture = replayOptions?.replayFixture;
       const replayRunner = replayOptions?.replayRunner;
+      const routingReplayOptions: RoutingValidationOptions = {
+        mode: effectiveValidationMode,
+        onReplayFallback: (reason) => {
+          replayFallbackReason = reason;
+          if (reason) {
+            console.error(
+              `[evolve-body] Replay not available (${reason}), falling back to LLM judge validation.`,
+            );
+            return;
+          }
+          console.error(
+            "[evolve-body] Replay not available, falling back to LLM judge validation.",
+          );
+        },
+      };
+      if (replayFixture) routingReplayOptions.replayFixture = replayFixture;
+      if (replayRunner) routingReplayOptions.replayRunner = replayRunner;
 
       if (target === "routing") {
         validation = await _validateRoutingProposal(
@@ -454,48 +469,17 @@ export async function evolveBody(
           evalSet,
           studentAgent,
           validationModelFlag,
-          {
-            ...(replayFixture ? { replayFixture } : {}),
-            ...(replayRunner ? { replayRunner } : {}),
-            mode: effectiveValidationMode,
-            onReplayFallback: (reason) => {
-              replayFallbackReason = reason;
-              if (reason) {
-                console.error(
-                  `[evolve-body] Replay not available (${reason}), falling back to LLM judge validation.`,
-                );
-                return;
-              }
-              console.error(
-                "[evolve-body] Replay not available, falling back to LLM judge validation.",
-              );
-            },
-          },
+          routingReplayOptions,
         );
       } else {
         const bodyReplayOptions: BodyValidationOptions = {
-          ...(replayFixture
-            ? {
-                replay: {
-                  replayFixture,
-                  ...(replayRunner ? { replayRunner } : {}),
-                },
-              }
-            : {}),
           mode: effectiveValidationMode,
-          onReplayFallback: (reason) => {
-            replayFallbackReason = reason;
-            if (reason) {
-              console.error(
-                `[evolve-body] Replay not available (${reason}), falling back to LLM judge validation.`,
-              );
-              return;
-            }
-            console.error(
-              "[evolve-body] Replay not available, falling back to LLM judge validation.",
-            );
-          },
+          onReplayFallback: routingReplayOptions.onReplayFallback,
         };
+        if (replayFixture) {
+          bodyReplayOptions.replay = { replayFixture };
+          if (replayRunner) bodyReplayOptions.replay.replayRunner = replayRunner;
+        }
         validation = await _validateBodyProposal(
           proposal,
           evalSet,
@@ -878,14 +862,24 @@ Options:
     );
   }
 
-  if (
-    values["validation-mode"] &&
-    !["auto", "replay", "judge"].includes(values["validation-mode"])
-  ) {
+  const validationMode = (["auto", "replay", "judge"] as const).find(
+    (mode) => mode === values["validation-mode"],
+  );
+  if (!validationMode) {
     throw new CLIError(
       `Invalid --validation-mode value: ${values["validation-mode"]}`,
       "INVALID_FLAG",
       "Use one of: auto, replay, judge",
+    );
+  }
+  const teacherEffort = (["low", "medium", "high", "max"] as const).find(
+    (effort) => effort === values["teacher-effort"],
+  );
+  if (!teacherEffort) {
+    throw new CLIError(
+      `Invalid --teacher-effort value: ${values["teacher-effort"]}`,
+      "INVALID_FLAG",
+      "Use one of: low, medium, high, max",
     );
   }
   const teacherAgent = values["teacher-agent"] ?? detectLlmAgent() ?? "";
@@ -920,7 +914,7 @@ Options:
   const result = await evolveBody({
     skillName: values.skill,
     skillPath: values["skill-path"],
-    target: targetStr as EvolutionTarget,
+    target: targetStr,
     teacherAgent,
     studentAgent,
     teacherModel: values["teacher-model"],
@@ -933,9 +927,8 @@ Options:
     fewShotExamples,
     gradingResults,
     validationModel: values["validation-model"],
-    validationMode:
-      (values["validation-mode"] as ValidationStrategy | undefined) ?? DEFAULT_VALIDATION_STRATEGY,
-    teacherEffort: (values["teacher-effort"] as EffortLevel) ?? "high",
+    validationMode,
+    teacherEffort,
     useReviewer: values.review ?? false,
   });
 

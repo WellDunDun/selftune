@@ -6,8 +6,10 @@
  * to produce an improved skill body.
  */
 
-import type { BodyEvolutionProposal, EvolutionTarget, FailurePattern } from "../types.js";
-import { type EffortLevel, callLlm, stripMarkdownFences } from "../utils/llm-call.js";
+import * as Schema from "effect/Schema";
+import type { BodyEvolutionProposal, FailurePattern } from "../types.js";
+import { type EffortLevel, callLlm } from "../utils/llm-call.js";
+import { decodeProposalResponse } from "./proposal-response.js";
 
 // ---------------------------------------------------------------------------
 // System prompt
@@ -106,43 +108,14 @@ Generate an improved full body for the "${skillName}" skill that would correctly
 // ---------------------------------------------------------------------------
 
 /** Parse LLM response text into structured body proposal data. */
-export function parseBodyProposalResponse(raw: string): {
-  proposed_body: string;
-  rationale: string;
-  confidence: number;
-} {
-  const cleaned = stripMarkdownFences(raw);
+const BodyProposalResponse = Schema.Struct({
+  proposed_body: Schema.String,
+  rationale: Schema.String,
+  confidence: Schema.Number,
+});
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error(`Failed to parse LLM response as JSON: ${cleaned.slice(0, 200)}`);
-  }
-
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error("LLM response is not a JSON object");
-  }
-
-  const obj = parsed as Record<string, unknown>;
-
-  if (typeof obj.proposed_body !== "string") {
-    throw new Error("Missing or invalid 'proposed_body' field in LLM response");
-  }
-  if (typeof obj.rationale !== "string") {
-    throw new Error("Missing or invalid 'rationale' field in LLM response");
-  }
-  if (typeof obj.confidence !== "number") {
-    throw new Error("Missing or invalid 'confidence' field in LLM response");
-  }
-
-  const confidence = Math.max(0.0, Math.min(1.0, obj.confidence));
-
-  return {
-    proposed_body: obj.proposed_body,
-    rationale: obj.rationale,
-    confidence,
-  };
+export function parseBodyProposalResponse(raw: string) {
+  return decodeProposalResponse(raw, BodyProposalResponse);
 }
 
 // ---------------------------------------------------------------------------
@@ -180,7 +153,7 @@ export async function generateBodyProposal(
     original_body: currentContent,
     proposed_body,
     rationale,
-    target: "body" as EvolutionTarget,
+    target: "body",
     failure_patterns: failurePatterns.map((p) => p.pattern_id),
     confidence,
     created_at: new Date().toISOString(),

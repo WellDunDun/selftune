@@ -2,8 +2,10 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
 
 import { startDashboardServer } from "@selftune/local/dashboard-server";
+import { createDashboardAuth } from "@selftune/local/dashboard-auth";
 
 const TOKEN = "TOKEN_PLACEHOLDER";
 let handle: Awaited<ReturnType<typeof startDashboardServer>>;
@@ -46,6 +48,20 @@ afterAll(() => {
 });
 
 describe("self-hosted dashboard authentication", () => {
+  test("rejects malformed login payloads without treating JSON values as tokens", async () => {
+    for (const body of ["null", "[]", "42", '{"token":42}', '{"token":{}}', "{broken"]) {
+      const auth = createDashboardAuth({ token: TOKEN, cookie: true });
+      const request = new Request("http://localhost/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      const response = await auth.handleSessionRoute(request, new URL(request.url), new Set());
+      expect(response?.status).toBe(401);
+      expect(response?.headers.get("set-cookie")).toBeNull();
+    }
+  });
+
   test("uses a derived browser session and keeps API requests authenticated", async () => {
     const redirect = await fetch(`${baseUrl}/`, { redirect: "manual" });
     expect(redirect.status).toBe(302);
@@ -128,11 +144,9 @@ describe("self-hosted dashboard authentication", () => {
       headers: { Authorization: `Bearer ${TOKEN}` },
     });
     expect(create.status).toBe(201);
-    const body = await create.json();
-    expect(body).toHaveProperty("handoff_path");
-    const handoffPath = Reflect.get(body, "handoff_path");
-    expect(typeof handoffPath).toBe("string");
-    if (typeof handoffPath !== "string") throw new TypeError("Missing handoff path.");
+    const { handoff_path: handoffPath } = Schema.decodeUnknownSync(
+      Schema.Struct({ handoff_path: Schema.String }),
+    )(await create.json());
 
     const handoff = new URL(handoffPath, baseUrl);
     handoff.searchParams.set("return_to", "/skills?selftune_profile_handoff=%5B%5D");

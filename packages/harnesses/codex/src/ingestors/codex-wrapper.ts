@@ -15,6 +15,8 @@
  *      writeSkillUsageToDb (Phase 3: JSONL writes removed)
  */
 
+import { Option } from "effect";
+import { decodeRolloutLine } from "./rollout-contract.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -124,20 +126,20 @@ export function parseJsonlStream(lines: string[], skillNames: Set<string>): Pars
   };
   // Only session metadata declares the installed skill inventory. Transcript
   // messages are untrusted content and may quote arbitrary skill lists.
-  const rememberTrustedSessionSkillNames = (text: unknown): void => {
-    if (typeof text !== "string" || !text) return;
+  const rememberTrustedSessionSkillNames = (text: string | undefined): void => {
+    if (!text) return;
     for (const skillName of extractSkillNamesFromInstructions(text, sessionSkillNames)) {
       sessionSkillNames.add(skillName);
     }
   };
-  const detectExplicitSkillReads = (text: unknown): void => {
-    if (typeof text !== "string" || !text) return;
+  const detectExplicitSkillReads = (text: string | undefined): void => {
+    if (!text) return;
     for (const skillName of extractSkillNamesFromPathReferences(text, sessionSkillNames)) {
       markSkillTriggered(skillName);
     }
   };
-  const detectExplicitPromptSkillMentions = (text: unknown): void => {
-    if (typeof text !== "string" || !text) return;
+  const detectExplicitPromptSkillMentions = (text: string | undefined): void => {
+    if (!text) return;
     if (isWrappedNonUserPart(text)) return;
     const actionableQuery = extractActionableQueryText(text);
     const internalTargetSkill = getInternalPromptTargetSkill(
@@ -166,53 +168,47 @@ export function parseJsonlStream(lines: string[], skillNames: Set<string>): Pars
     const line = rawLine.trim();
     if (!line) continue;
 
-    let event: Record<string, unknown>;
-    try {
-      event = JSON.parse(line);
-    } catch {
-      continue;
-    }
-
-    const etype = (event.type as string) ?? "";
+    const decoded = decodeRolloutLine(line);
+    if (Option.isNone(decoded)) continue;
+    const event = decoded.value;
+    const etype = event.type ?? "";
 
     if (etype === "thread.started") {
-      threadId = (event.thread_id as string) ?? "unknown";
+      threadId = event.thread_id ?? "unknown";
     } else if (etype === "session_meta") {
-      const payload = (event.payload as Record<string, unknown>) ?? {};
+      const payload = event.payload ?? {};
       rememberTrustedSessionSkillNames(payload.instructions);
-      rememberTrustedSessionSkillNames(
-        (payload.base_instructions as Record<string, unknown> | undefined)?.text,
-      );
+      rememberTrustedSessionSkillNames(payload.base_instructions?.text);
     } else if (etype === "turn.started") {
       turns += 1;
     } else if (etype === "turn.completed") {
-      const usage = (event.usage as Record<string, number>) ?? {};
+      const usage = event.usage ?? {};
       inputTokens += usage.input_tokens ?? 0;
       outputTokens += usage.output_tokens ?? 0;
     } else if (etype === "turn.failed") {
       errors += 1;
     } else if (etype === "item.completed" || etype === "item.started" || etype === "item.updated") {
-      const item = (event.item as Record<string, unknown>) ?? {};
-      const itemType = (item.item_type as string) ?? (item.type as string) ?? "";
+      const item = event.item ?? {};
+      const itemType = item.item_type ?? item.type ?? "";
 
       if (etype === "item.completed") {
         if (itemType === "command_execution") {
           toolCalls.command_execution = (toolCalls.command_execution ?? 0) + 1;
-          const cmd = ((item.command as string) ?? "").trim();
+          const cmd = (item.command ?? "").trim();
           if (cmd) bashCommands.push(cmd);
-          if ((item.exit_code as number) !== 0 && item.exit_code !== undefined) {
+          if (item.exit_code !== 0 && item.exit_code !== undefined) {
             errors += 1;
           }
         } else if (itemType === "file_change") {
           toolCalls.file_change = (toolCalls.file_change ?? 0) + 1;
         } else if (itemType === "mcp_tool_call") {
-          const toolName = (item.tool as string) ?? "unknown";
+          const toolName = item.tool ?? "unknown";
           const key = `mcp:${toolName}`;
           toolCalls[key] = (toolCalls[key] ?? 0) + 1;
         } else if (itemType === "web_search") {
           toolCalls.web_search = (toolCalls.web_search ?? 0) + 1;
         } else if (itemType === "agent_message") {
-          const text = (item.text as string) ?? "";
+          const text = item.text ?? "";
           if (text) agentMessages.push(text.slice(0, 500));
         } else if (itemType === "reasoning") {
           toolCalls.reasoning = (toolCalls.reasoning ?? 0) + 1;
@@ -223,21 +219,13 @@ export function parseJsonlStream(lines: string[], skillNames: Set<string>): Pars
         detectExplicitSkillReads(item.command);
       }
     } else if (etype === "response_item") {
-      const payload = (event.payload as Record<string, unknown>) ?? {};
-      const itemType = (payload.type as string) ?? "";
+      const payload = event.payload ?? {};
+      const itemType = payload.type ?? "";
       if (itemType === "function_call") {
         detectExplicitSkillReads(payload.arguments);
       } else if (itemType === "message") {
-        const parts = Array.isArray(payload.content)
-          ? payload.content
-              .map((part) =>
-                typeof part === "object" && part
-                  ? (((part as Record<string, unknown>).text as string | undefined) ?? "")
-                  : "",
-              )
-              .filter(Boolean)
-          : [];
-        if ((payload.role as string) === "user") {
+        const parts = payload.content?.flatMap((part) => (part?.text ? [part.text] : [])) ?? [];
+        if (payload.role === "user") {
           for (const part of parts) {
             detectExplicitPromptSkillMentions(part);
           }
@@ -442,7 +430,6 @@ export async function cliMain(): Promise<void> {
   cmd = deduped;
 
   const collectedLines: string[] = [];
-  let threadId = "unknown";
 
   try {
     const proc = Bun.spawn(cmd, {
@@ -468,14 +455,6 @@ export async function cliMain(): Promise<void> {
         const trimmed = line.trim();
         if (trimmed) {
           collectedLines.push(trimmed);
-          try {
-            const ev = JSON.parse(trimmed);
-            if (ev.type === "thread.started") {
-              threadId = ev.thread_id ?? "unknown";
-            }
-          } catch {
-            // skip
-          }
         }
       }
     }
@@ -489,8 +468,7 @@ export async function cliMain(): Promise<void> {
 
     // Parse and log
     const metrics = parseJsonlStream(collectedLines, skillNames);
-    const actualThreadId = metrics.thread_id;
-    const sessionId = actualThreadId && actualThreadId !== "unknown" ? actualThreadId : threadId;
+    const sessionId = metrics.thread_id ?? "unknown";
 
     const { thread_id: _, ...metricsWithoutThread } = metrics;
 

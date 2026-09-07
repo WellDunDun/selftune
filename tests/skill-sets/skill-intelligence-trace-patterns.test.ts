@@ -59,7 +59,7 @@ test("turns supplied trace snapshots into a non-causal repeated-error pattern", 
     now: new Date("2026-07-23T12:00:00.000Z"),
   });
 
-  expect(report.trace_signals).toEqual(traceSignals);
+  expect(report.trace_signals).toEqual([...traceSignals]);
   expect(report.execution_patterns).toEqual([
     {
       pattern_id: expect.stringMatching(/^execution-pattern-/),

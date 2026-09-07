@@ -1,9 +1,10 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
 
-import type {
+import {
   HostedSkillSetAssignment,
-  HostedSkillSetInstallationReceiptRequest,
+  type HostedSkillSetInstallationReceiptRequest,
 } from "@selftune/control-plane";
 import { openDb } from "@selftune/local-store";
 import {
@@ -16,15 +17,17 @@ import {
   makeTeamSkillSetAssignmentRuntime,
 } from "@selftune/runtime/team-assignment";
 
-interface TracerInput {
-  readonly mode: "install" | "rollback";
-  readonly root: string;
-  readonly assignment: HostedSkillSetAssignment;
-  readonly packageBase64: string;
-  readonly receiptId?: string;
-}
+const TracerInput = Schema.Struct({
+  mode: Schema.Literals(["install", "rollback"]),
+  root: Schema.String,
+  assignment: HostedSkillSetAssignment,
+  packageBase64: Schema.String,
+  receiptId: Schema.optionalKey(Schema.String),
+});
 
-const input = JSON.parse(await Bun.file(process.argv[2]!).text()) as TracerInput;
+const input = Schema.decodeUnknownSync(Schema.fromJsonString(TracerInput))(
+  await Bun.file(process.argv[2]!).text(),
+);
 const projectRoot = join(input.root, "project");
 const configRoot = join(input.root, "config");
 const homeRoot = join(input.root, "home");

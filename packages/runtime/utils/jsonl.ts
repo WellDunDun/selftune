@@ -14,12 +14,22 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
+import * as Schema from "effect/Schema";
+
+export function jsonlDecoder<A>(schema: Schema.Codec<A>) {
+  const decode = Schema.decodeUnknownSync(Schema.fromJsonString(schema));
+  return (line: string) => decode(line, { onExcessProperty: "preserve" });
+}
+
+export const decodeJsonLine = jsonlDecoder(Schema.Json);
+
+export type JsonlDecoder<A> = (line: string) => A;
 
 /**
  * Read a JSONL file and return parsed records.
  * Skips blank lines and lines that fail to parse.
  */
-export function readJsonl<T = Record<string, unknown>>(path: string): T[] {
+export function readJsonl<T>(path: string, decode: JsonlDecoder<T>): T[] {
   if (!existsSync(path)) return [];
   const content = readFileSync(path, "utf-8");
   const records: T[] = [];
@@ -27,7 +37,7 @@ export function readJsonl<T = Record<string, unknown>>(path: string): T[] {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
-      records.push(JSON.parse(trimmed) as T);
+      records.push(decode(trimmed));
     } catch {
       // skip malformed lines
     }
@@ -44,10 +54,7 @@ export function readJsonl<T = Record<string, unknown>>(path: string): T[] {
  * Uses Node fs with a file descriptor + read to only load the tail
  * of the file into memory, keeping the hot path lightweight.
  */
-export function readJsonlFrom<T = Record<string, unknown>>(
-  path: string,
-  byteOffset: number,
-): { records: T[]; newOffset: number } {
+export function readJsonlFrom<T>(path: string, byteOffset: number, decode: JsonlDecoder<T>) {
   if (!existsSync(path)) return { records: [], newOffset: 0 };
   const fd = openSync(path, "r");
   try {
@@ -71,7 +78,7 @@ export function readJsonlFrom<T = Record<string, unknown>>(
       const trimmed = line.trim();
       if (!trimmed) continue;
       try {
-        records.push(JSON.parse(trimmed) as T);
+        records.push(decode(trimmed));
       } catch {
         // skip malformed lines
       }
@@ -88,8 +95,10 @@ export function readJsonlFrom<T = Record<string, unknown>>(
 export function loadMarker(path: string): Set<string> {
   if (!existsSync(path)) return new Set();
   try {
-    const data = JSON.parse(readFileSync(path, "utf-8"));
-    return new Set(Array.isArray(data) ? data : []);
+    const data = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Json)))(
+      readFileSync(path, "utf-8"),
+    );
+    return new Set(data.filter(Schema.is(Schema.String)));
   } catch {
     return new Set();
   }
@@ -114,34 +123,15 @@ export interface FileIngestionFingerprint {
 
 export type FileIngestionMarker = Map<string, FileIngestionFingerprint>;
 
-interface SerializedFileIngestionMarker {
-  readonly marker_version: 2;
-  readonly files: Record<string, FileIngestionFingerprint>;
-}
-
-function isFileIngestionFingerprint(value: unknown): value is FileIngestionFingerprint {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const record = Object.fromEntries(Object.entries(value));
-  return (
-    typeof record.size === "number" &&
-    Number.isFinite(record.size) &&
-    record.size >= 0 &&
-    typeof record.mtime_ms === "number" &&
-    Number.isFinite(record.mtime_ms) &&
-    record.mtime_ms >= 0 &&
-    typeof record.normalizer_version === "string" &&
-    record.normalizer_version.length > 0
-  );
-}
-
-function isSerializedFileIngestionMarker(value: unknown): value is SerializedFileIngestionMarker {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const record = Object.fromEntries(Object.entries(value));
-  if (record.marker_version !== 2 || typeof record.files !== "object" || record.files === null) {
-    return false;
-  }
-  return Object.values(record.files).every(isFileIngestionFingerprint);
-}
+const FileFingerprint = Schema.Struct({
+  size: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+  mtime_ms: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+  normalizer_version: Schema.String.check(Schema.isMinLength(1)),
+});
+const SerializedFileIngestionMarker = Schema.Struct({
+  marker_version: Schema.Literal(2),
+  files: Schema.Record(Schema.String, FileFingerprint),
+});
 
 /**
  * Load append-aware ingestion state.
@@ -152,8 +142,9 @@ function isSerializedFileIngestionMarker(value: unknown): value is SerializedFil
 export function loadFileIngestionMarker(path: string): FileIngestionMarker {
   if (!existsSync(path)) return new Map();
   try {
-    const data: unknown = JSON.parse(readFileSync(path, "utf-8"));
-    if (!isSerializedFileIngestionMarker(data)) return new Map();
+    const data = Schema.decodeUnknownSync(Schema.fromJsonString(SerializedFileIngestionMarker))(
+      readFileSync(path, "utf-8"),
+    );
     return new Map(Object.entries(data.files));
   } catch {
     return new Map();
@@ -195,6 +186,6 @@ export function saveFileIngestionMarker(path: string, marker: FileIngestionMarke
   const files = Object.fromEntries(
     [...marker.entries()].toSorted(([left], [right]) => left.localeCompare(right)),
   );
-  const serialized: SerializedFileIngestionMarker = { marker_version: 2, files };
+  const serialized: typeof SerializedFileIngestionMarker.Type = { marker_version: 2, files };
   writeFileSync(path, JSON.stringify(serialized, null, 2), "utf-8");
 }

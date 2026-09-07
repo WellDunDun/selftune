@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { resolve } from "node:path";
 
-import type { RemoteArtifact, RemoteSnapshot, SyncPreferences } from "@selftune/control-plane";
+import type { RemoteSnapshot, SyncPreferences } from "@selftune/control-plane";
 import {
   diagnoseRemote,
   exportRemoteLibrary,
@@ -26,10 +26,7 @@ export async function previewRemoteLibrarySync(options: {
   preferences: SyncPreferences;
   catalogOptions?: LibraryCatalogOptions;
   db?: Database;
-}): Promise<{
-  artifacts: Array<RemoteArtifact & { bytes: number; preview: unknown }>;
-  totalBytes: number;
-}> {
+}) {
   const configRoot = resolve(options.configRoot ?? SELFTUNE_CONFIG_DIR);
   const db = options.db ?? (configRoot === resolve(SELFTUNE_CONFIG_DIR) ? getDb() : undefined);
   const objects = await collectLocalObjects({

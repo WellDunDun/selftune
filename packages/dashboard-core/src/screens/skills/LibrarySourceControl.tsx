@@ -38,8 +38,8 @@ export function LibrarySourceControl({
         className="max-w-52"
         title={source.path}
         onClick={() => {
-          void openLocation.execute(source.path ?? "").catch((error: unknown) => {
-            onError(error instanceof Error ? error.message : String(error));
+          void openLocation.execute(source.path ?? "").catch((cause: unknown) => {
+            onError(cause instanceof Error ? cause.message : String(cause));
           });
         }}
       >

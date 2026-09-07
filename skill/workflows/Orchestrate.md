@@ -2,6 +2,9 @@
 
 Run the autonomy-first selftune loop in one command.
 
+Operational history stays local. Orchestration does not stage hosted telemetry;
+only the separate, explicitly consented contributor-signal relay may send signals.
+
 This remains the underlying runtime, but the simplified product surface should
 teach it as `Run`.
 

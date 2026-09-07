@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +6,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { searchForWorkspaceRoot } from "vite";
 import { defineConfig } from "vitest/config";
+import packageManifest from "../../package.json";
 
 function resolvePort(rawValue: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(rawValue ?? "", 10);
@@ -15,9 +15,7 @@ function resolvePort(rawValue: string | undefined, fallback: number): number {
 
 const vitePort = resolvePort(process.env.VITE_PORT, 5199);
 const dashboardPort = resolvePort(process.env.DASHBOARD_PORT, 7888);
-const packageVersion = JSON.parse(
-  readFileSync(new URL("../../package.json", import.meta.url), "utf-8"),
-).version as string;
+const packageVersion = packageManifest.version;
 const spaBuildId = process.env.SELFTUNE_SPA_BUILD_ID ?? packageVersion;
 const geistPackageRoot = dirname(
   createRequire(import.meta.url).resolve("@fontsource-variable/geist/package.json"),

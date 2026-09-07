@@ -82,7 +82,7 @@ function failure(operation: string, cause: unknown): EvaluationSubmissionDraftFa
 
 function decodeDraft(
   operation: string,
-  value: unknown,
+  value: typeof evaluation_submission_drafts.$inferSelect,
 ): Effect.Effect<EvaluationSubmissionDraft, EvaluationSubmissionDraftFailure> {
   return Schema.decodeUnknownEffect(EvaluationSubmissionDraft)(value).pipe(
     Effect.mapError(
@@ -110,8 +110,8 @@ function validateOpaqueJson(
  */
 export const createOrGetPreparedEvaluationSubmissionDraft = Effect.fn(
   "LocalStore.createOrGetPreparedEvaluationSubmissionDraft",
-)(function* (database: Database, unknown: unknown) {
-  const input = yield* Schema.decodeUnknownEffect(PrepareEvaluationSubmissionDraft)(unknown).pipe(
+)(function* (database: Database, candidate: typeof PrepareEvaluationSubmissionDraft.Encoded) {
+  const input = yield* Schema.decodeUnknownEffect(PrepareEvaluationSubmissionDraft)(candidate).pipe(
     Effect.mapError(
       (error) =>
         new EvaluationSubmissionDraftFailure({
@@ -175,8 +175,8 @@ export const createOrGetPreparedEvaluationSubmissionDraft = Effect.fn(
 });
 
 export const getEvaluationSubmissionDraft = Effect.fn("LocalStore.getEvaluationSubmissionDraft")(
-  function* (database: Database, unknownDraftId: unknown) {
-    const draftId = yield* Schema.decodeUnknownEffect(Identifier)(unknownDraftId).pipe(
+  function* (database: Database, requestedDraftId: string) {
+    const draftId = yield* Schema.decodeUnknownEffect(Identifier)(requestedDraftId).pipe(
       Effect.mapError(
         (error) =>
           new EvaluationSubmissionDraftFailure({
@@ -203,8 +203,10 @@ export const getEvaluationSubmissionDraft = Effect.fn("LocalStore.getEvaluationS
 /** Marks only a prepared draft stale. Repeating the transition is idempotent. */
 export const markEvaluationSubmissionDraftStale = Effect.fn(
   "LocalStore.markEvaluationSubmissionDraftStale",
-)(function* (database: Database, unknown: unknown) {
-  const input = yield* Schema.decodeUnknownEffect(MarkEvaluationSubmissionDraftStale)(unknown).pipe(
+)(function* (database: Database, transition: typeof MarkEvaluationSubmissionDraftStale.Encoded) {
+  const input = yield* Schema.decodeUnknownEffect(MarkEvaluationSubmissionDraftStale)(
+    transition,
+  ).pipe(
     Effect.mapError(
       (error) =>
         new EvaluationSubmissionDraftFailure({
@@ -250,9 +252,12 @@ export const markEvaluationSubmissionDraftStale = Effect.fn(
  */
 export const markEvaluationSubmissionDraftSubmitted = Effect.fn(
   "LocalStore.markEvaluationSubmissionDraftSubmitted",
-)(function* (database: Database, unknown: unknown) {
+)(function* (
+  database: Database,
+  transition: typeof MarkEvaluationSubmissionDraftSubmitted.Encoded,
+) {
   const input = yield* Schema.decodeUnknownEffect(MarkEvaluationSubmissionDraftSubmitted)(
-    unknown,
+    transition,
   ).pipe(
     Effect.mapError(
       (error) =>

@@ -135,8 +135,8 @@ function responseText(response: HttpClientResponse.HttpClientResponse) {
   }
   return Stream.runFoldEffect(
     response.stream,
-    (): { readonly chunks: ReadonlyArray<Uint8Array>; readonly size: number } => ({
-      chunks: [],
+    () => ({
+      chunks: Array<Uint8Array>(),
       size: 0,
     }),
     (state, chunk) => {
@@ -173,16 +173,7 @@ const decodeResponse = Effect.fn("selftune.registry.decodeResponse")(function* <
     });
   }
 
-  const parsed = yield* Effect.try({
-    try: (): unknown => (text ? JSON.parse(text) : {}),
-    catch: (cause) =>
-      RegistryResponseDecodeError.make({
-        status: response.status,
-        message: cause instanceof Error ? cause.message : String(cause),
-      }),
-  });
-
-  return yield* Schema.decodeUnknownEffect(schema)(parsed).pipe(
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(text || "{}").pipe(
     Effect.mapError((cause) =>
       RegistryResponseDecodeError.make({
         status: response.status,
@@ -220,8 +211,8 @@ function makeRequest(
 function readBoundedArchive(response: HttpClientResponse.HttpClientResponse) {
   return Stream.runFoldEffect(
     response.stream,
-    (): { readonly chunks: ReadonlyArray<Uint8Array>; readonly size: number } => ({
-      chunks: [],
+    () => ({
+      chunks: Array<Uint8Array>(),
       size: 0,
     }),
     (state, chunk) => {

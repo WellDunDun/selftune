@@ -7,29 +7,35 @@ import type { EvalSnapshot, EvolutionEntry } from "../types";
 import { timeAgo } from "../lib/format";
 import { TrendingUpIcon, TrendingDownIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 
-const ACTION_COLOR: Record<string, string> = {
-  created: "bg-primary/35",
-  validated: "bg-primary/65",
-  deployed: "bg-primary",
-  rejected: "bg-destructive/85",
-  rolled_back: "bg-destructive/45",
-};
+const ACTION_COLOR = new Map(
+  Object.entries({
+    created: "bg-primary/35",
+    validated: "bg-primary/65",
+    deployed: "bg-primary",
+    rejected: "bg-destructive/85",
+    rolled_back: "bg-destructive/45",
+  } satisfies Record<string, string>),
+);
 
-const ACTION_RING: Record<string, string> = {
-  created: "ring-primary/15",
-  validated: "ring-primary/20",
-  deployed: "ring-primary/30",
-  rejected: "ring-destructive/20",
-  rolled_back: "ring-destructive/15",
-};
+const ACTION_RING = new Map(
+  Object.entries({
+    created: "ring-primary/15",
+    validated: "ring-primary/20",
+    deployed: "ring-primary/30",
+    rejected: "ring-destructive/20",
+    rolled_back: "ring-destructive/15",
+  } satisfies Record<string, string>),
+);
 
-const ACTION_LINE: Record<string, string> = {
-  created: "bg-primary/12",
-  validated: "bg-primary/18",
-  deployed: "bg-primary/30",
-  rejected: "bg-destructive/18",
-  rolled_back: "bg-destructive/12",
-};
+const ACTION_LINE = new Map(
+  Object.entries({
+    created: "bg-primary/12",
+    validated: "bg-primary/18",
+    deployed: "bg-primary/30",
+    rejected: "bg-destructive/18",
+    rolled_back: "bg-destructive/12",
+  } satisfies Record<string, string>),
+);
 
 interface Props {
   entries: EvolutionEntry[];
@@ -115,7 +121,9 @@ function LifecycleLegend() {
         <div className="mt-1.5 space-y-1.5 rounded-md border bg-muted/30 p-2">
           {LIFECYCLE_STEPS.map((step) => (
             <div key={step.action} className="flex items-start gap-2">
-              <div className={cn("size-2 rounded-full mt-1 shrink-0", ACTION_COLOR[step.action])} />
+              <div
+                className={cn("size-2 rounded-full mt-1 shrink-0", ACTION_COLOR.get(step.action))}
+              />
               <div className="min-w-0">
                 <span className="text-[10px] font-medium">{step.label}</span>
                 <p className="text-[10px] text-muted-foreground/70 leading-tight">{step.desc}</p>
@@ -150,9 +158,9 @@ export function EvolutionTimeline({ entries, selectedProposalId, onSelect }: Pro
           const terminal = terminalAction(steps);
           const isSelected = selectedProposalId === proposalId;
           const lastStep = steps[steps.length - 1];
-          const dotColor = ACTION_COLOR[terminal] ?? "bg-muted-foreground";
-          const ringColor = ACTION_RING[terminal] ?? "ring-muted-foreground/30";
-          const lineColor = ACTION_LINE[terminal] ?? "bg-border";
+          const dotColor = ACTION_COLOR.get(terminal) ?? "bg-muted-foreground";
+          const ringColor = ACTION_RING.get(terminal) ?? "ring-muted-foreground/30";
+          const lineColor = ACTION_LINE.get(terminal) ?? "bg-border";
           const isLast = groupIdx === groups.length - 1;
           const snapshot = findEvalSnapshot(steps);
 
@@ -197,13 +205,12 @@ export function EvolutionTimeline({ entries, selectedProposalId, onSelect }: Pro
                 {snapshot && (
                   <div className="flex items-center gap-1.5 mt-1">
                     <PassRateDelta snapshot={snapshot} />
-                    {snapshot.before_pass_rate !== undefined &&
-                      snapshot.after_pass_rate !== undefined && (
-                        <span className="text-[10px] text-muted-foreground/60 font-mono">
-                          {Math.round(snapshot.before_pass_rate * 100)}&rarr;
-                          {Math.round(snapshot.after_pass_rate * 100)}%
-                        </span>
-                      )}
+                    {snapshot.before_pass_rate != null && snapshot.after_pass_rate != null && (
+                      <span className="text-[10px] text-muted-foreground/60 font-mono">
+                        {Math.round(snapshot.before_pass_rate * 100)}&rarr;
+                        {Math.round(snapshot.after_pass_rate * 100)}%
+                      </span>
+                    )}
                   </div>
                 )}
                 <div className="flex items-center gap-1.5 mt-1">
@@ -218,7 +225,7 @@ export function EvolutionTimeline({ entries, selectedProposalId, onSelect }: Pro
                           key={`${s.action}-${i}`}
                           className={cn(
                             "size-1.5 rounded-full",
-                            ACTION_COLOR[s.action] ?? "bg-muted-foreground",
+                            ACTION_COLOR.get(s.action) ?? "bg-muted-foreground",
                           )}
                         />
                       ))}

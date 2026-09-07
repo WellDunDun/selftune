@@ -1,4 +1,7 @@
 import * as Schema from "effect/Schema";
+import * as Predicate from "effect/Predicate";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
 
 import type {
   TeamCollaborationSnapshotModel,
@@ -191,18 +194,17 @@ async function collaborationRequest(input: {
   readonly loadConfig: typeof loadRemoteLibraryConfig;
   readonly path: string;
   readonly method: "GET" | "PATCH" | "POST";
-  readonly body?: unknown;
-}): Promise<unknown> {
+  readonly body?: { readonly policy: TeamRolloutPolicyModel };
+}): Promise<string> {
   const remote = input.loadConfig(input.configRoot);
+  const headers = new Headers({ Authorization: `Bearer ${remote.apiKey}` });
+  if (input.body !== undefined) headers.set("Content-Type", "application/json");
   let response: Response;
   try {
     response = await input.fetch(new URL(input.path, remote.url), {
       method: input.method,
-      headers: {
-        Authorization: `Bearer ${remote.apiKey}`,
-        ...(input.body === undefined ? {} : { "Content-Type": "application/json" }),
-      },
-      ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
+      headers,
+      body: input.body === undefined ? undefined : JSON.stringify(input.body),
     });
   } catch (cause) {
     throw CloudTeamCollaborationError.make({
@@ -226,37 +228,39 @@ async function collaborationRequest(input: {
       });
     }
     try {
-      const decoded = Schema.decodeUnknownSync(CloudErrorResponse)(JSON.parse(responseText));
-      const error = typeof decoded.error === "string" ? { message: decoded.error } : decoded.error;
-      throw CloudTeamCollaborationError.make({
+      const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(CloudErrorResponse))(
+        responseText,
+      );
+      const error = Predicate.isString(decoded.error) ? { message: decoded.error } : decoded.error;
+      const failure = {
         code: error.code ?? "API_ERROR",
         message: error.message ?? `Team collaboration request failed (${response.status}).`,
         status: response.status,
-        ...(error.suggestion ? { suggestion: error.suggestion } : {}),
         retryable: error.retryable ?? response.status >= 500,
-      });
+      };
+      if (error.suggestion)
+        throw CloudTeamCollaborationError.make({ ...failure, suggestion: error.suggestion });
+      throw CloudTeamCollaborationError.make(failure);
     } catch (cause) {
       if (cause instanceof CloudTeamCollaborationError) throw cause;
     }
-    throw CloudTeamCollaborationError.make({
+    const failure = {
       code: "API_ERROR",
       message: `Team collaboration request failed (${response.status}).`,
       status: response.status,
-      ...(response.status >= 500 ? { suggestion: "Retry in a moment." } : {}),
       retryable: response.status >= 500,
-    });
+    };
+    if (response.status >= 500)
+      throw CloudTeamCollaborationError.make({ ...failure, suggestion: "Retry in a moment." });
+    throw CloudTeamCollaborationError.make(failure);
   }
 
-  try {
-    return JSON.parse(responseText);
-  } catch {
-    throw invalidResponse();
-  }
+  return responseText;
 }
 
-function decodeSnapshot(body: unknown): TeamCollaborationSnapshotModel {
+function decodeSnapshot(body: string): TeamCollaborationSnapshotModel {
   try {
-    const decoded = Schema.decodeUnknownSync(CollaborationSnapshot)(body);
+    const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(CollaborationSnapshot))(body);
     return {
       entries: decoded.entries.map((entry) => ({ ...entry })),
       contributions: decoded.contributions.map((contribution) => ({
@@ -271,32 +275,43 @@ function decodeSnapshot(body: unknown): TeamCollaborationSnapshotModel {
   }
 }
 
-function decodeAccess(body: unknown): TeamCollaborationAccessModel {
+function decodeAccess(body: string): TeamCollaborationAccessModel {
   try {
-    const status = Schema.decodeUnknownSync(TeamStatus)(body);
+    const status = Schema.decodeUnknownSync(Schema.fromJsonString(TeamStatus))(body);
     return { currentRole: status.currentRole, readOnly: status.readOnly };
   } catch {
     throw invalidResponse();
   }
 }
 
-function decodeRolloutPolicyResult(body: unknown): TeamRolloutPolicyResultModel {
+function decodeRolloutPolicyResult(body: string): TeamRolloutPolicyResultModel {
   try {
-    return Schema.decodeUnknownSync(RolloutPolicyResult)(body);
+    return Schema.decodeUnknownSync(Schema.fromJsonString(RolloutPolicyResult))(body);
   } catch {
     throw invalidResponse();
   }
 }
 
-function decodeDecisionResult(body: unknown): TeamContributionDecisionResultModel {
+function decodeDecisionResult(body: string): TeamContributionDecisionResultModel {
   try {
-    return Schema.decodeUnknownSync(ContributionDecisionResult)(body);
+    return Schema.decodeUnknownSync(Schema.fromJsonString(ContributionDecisionResult))(body);
   } catch {
     throw invalidResponse();
   }
 }
 
 /** Retains the device credential in the sidecar and forwards only validated collaboration data. */
+export class CloudTeamCollaborationService extends Context.Service<
+  CloudTeamCollaborationService,
+  ReturnType<typeof makeCloudTeamCollaborationOperations>
+>()("SelfTune/CloudTeamCollaboration") {}
+
+export function makeCloudTeamCollaborationLayer(configRoot: string) {
+  return Layer.sync(CloudTeamCollaborationService)(() =>
+    makeCloudTeamCollaborationOperations(configRoot),
+  );
+}
+
 export function makeCloudTeamCollaborationOperations(
   configRoot: string,
   options: CloudTeamCollaborationTransportOptions = {},

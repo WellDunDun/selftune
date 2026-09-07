@@ -53,49 +53,46 @@ export function exportToJsonl(options: ExportOptions = {}): ExportResult {
   }
 
   const db = getDb();
-  const tables: Record<string, { query: () => unknown[]; filename: string }> = {
-    telemetry: { query: () => querySessionTelemetry(db), filename: "session_telemetry_log.jsonl" },
-    skills: { query: () => querySkillUsageRecords(db), filename: "skill_usage_log.jsonl" },
-    queries: { query: () => queryQueryLog(db), filename: "all_queries_log.jsonl" },
-    audit: { query: () => queryEvolutionAudit(db), filename: "evolution_audit_log.jsonl" },
-    evidence: { query: () => queryEvolutionEvidence(db), filename: "evolution_evidence_log.jsonl" },
-    signals: { query: () => queryImprovementSignals(db), filename: "signal_log.jsonl" },
-    orchestrate: {
-      query: () => getOrchestrateRuns(db),
-      filename: "orchestrate_run_log.jsonl",
-    },
-  };
+  const tables = new Map(
+    Object.entries({
+      telemetry: {
+        query: () => querySessionTelemetry(db),
+        filename: "session_telemetry_log.jsonl",
+      },
+      skills: { query: () => querySkillUsageRecords(db), filename: "skill_usage_log.jsonl" },
+      queries: { query: () => queryQueryLog(db), filename: "all_queries_log.jsonl" },
+      audit: { query: () => queryEvolutionAudit(db), filename: "evolution_audit_log.jsonl" },
+      evidence: {
+        query: () => queryEvolutionEvidence(db),
+        filename: "evolution_evidence_log.jsonl",
+      },
+      signals: { query: () => queryImprovementSignals(db), filename: "signal_log.jsonl" },
+      orchestrate: {
+        query: () => getOrchestrateRuns(db),
+        filename: "orchestrate_run_log.jsonl",
+      },
+    }),
+  );
 
   mkdirSync(outDir, { recursive: true });
   const files: string[] = [];
   let totalRecords = 0;
 
   for (const tableName of selectedTables) {
-    const table = tables[tableName];
+    const table = tables.get(tableName);
     if (!table) {
       throw new Error(`Export table configuration missing: ${tableName}`);
     }
 
-    let records = table.query();
-
-    // Filter by timestamp if --since provided
-    if (options.since) {
-      const sinceDate = new Date(options.since);
-      if (Number.isNaN(sinceDate.getTime())) {
-        console.warn(`Invalid --since date: ${options.since}, skipping filter`);
-      } else {
-        const sinceMs = sinceDate.getTime();
-        const sinceIso = sinceDate.toISOString();
-        records = records.filter((r) => {
-          const rec = r as Record<string, unknown>;
-          // Try common timestamp fields
-          const ts = rec.timestamp ?? rec.ts ?? rec.created_at ?? rec.started_at;
-          if (typeof ts === "number") return ts >= sinceMs;
-          if (typeof ts === "string") return ts >= sinceIso;
-          return true; // Keep records without a timestamp field
-        });
-      }
+    const queried = table.query();
+    const sinceDate = options.since ? new Date(options.since) : null;
+    const sinceIso =
+      sinceDate && !Number.isNaN(sinceDate.getTime()) ? sinceDate.toISOString() : null;
+    if (sinceDate && sinceIso === null) {
+      console.warn(`Invalid --since date: ${options.since}, skipping filter`);
     }
+    const records =
+      sinceIso === null ? queried : queried.filter((record) => record.timestamp >= sinceIso);
 
     const filePath = join(outDir, table.filename);
     const content = records.map((r) => JSON.stringify(r)).join("\n") + (records.length ? "\n" : "");

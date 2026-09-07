@@ -5,16 +5,15 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { Option, Schema } from "effect";
 
 import {
   dashboardActionContextEnv,
   type DashboardActionContext,
 } from "@selftune/runtime/dashboard-action-events";
 import { resolveDashboardActionOutcome } from "@selftune/runtime/dashboard-action-result";
-import type {
-  DashboardActionEvent,
-  DashboardActionName,
-} from "@selftune/runtime/dashboard-contract";
+import type { DashboardActionEvent } from "@selftune/runtime/dashboard-contract";
+import { DashboardActionName } from "@selftune/runtime/dashboard-contract/action-name";
 import { isCreateSkillDraft } from "@selftune/runtime/create/readiness";
 import { getCanonicalEvalSetPath, getUnitTestPath } from "@selftune/runtime/testing-readiness";
 import { saveWatchedSkills } from "@selftune/runtime/watchlist";
@@ -135,27 +134,25 @@ export async function runAction(
   }
 }
 
-function requireSkillInput(
-  body: Record<string, unknown>,
-): { skill: string; skillPath: string } | Response {
-  const skill = body.skill as string | undefined;
-  const skillPath = body.skillPath as string | undefined;
-  if (!skill || !skillPath) {
-    return Response.json(
-      { success: false, error: "Missing required fields: skill, skillPath" },
-      { status: 400 },
-    );
-  }
-  return { skill, skillPath };
-}
+const SkillActionInput = Schema.Struct({
+  skill: Schema.NonEmptyString,
+  skillPath: Schema.NonEmptyString,
+  autoSynthetic: Schema.optionalKey(Schema.Boolean),
+  proposalId: Schema.optionalKey(Schema.String),
+});
+const decodeSkillActionInput = Schema.decodeUnknownOption(SkillActionInput);
+const decodeActionName = Schema.decodeUnknownOption(DashboardActionName);
+const decodeWatchlist = Schema.decodeUnknownOption(
+  Schema.Struct({
+    skills: Schema.optionalKey(Schema.NullOr(Schema.mutable(Schema.Array(Schema.String)))),
+  }),
+);
 
 function buildActionExecution(
   action: DashboardActionName,
-  body: Record<string, unknown>,
+  body: typeof SkillActionInput.Type,
 ): { command: string; args: string[]; skill: string; skillPath: string } | Response {
-  const skillInput = requireSkillInput(body);
-  if (skillInput instanceof Response) return skillInput;
-  const { skill, skillPath } = skillInput;
+  const { skill, skillPath } = body;
   const isDraftPackage = isCreateSkillDraft(skillPath);
 
   if (action === "generate-evals") {
@@ -297,7 +294,7 @@ function buildActionExecution(
   }
 
   if (action === "rollback") {
-    const proposalId = body.proposalId as string | undefined;
+    const proposalId = body.proposalId;
     const args = ["rollback", "--skill", skill, "--skill-path", skillPath];
     if (proposalId) {
       args.push("--proposal-id", proposalId);
@@ -310,24 +307,25 @@ function buildActionExecution(
 
 export async function handleAction(
   action: string,
-  body: Record<string, unknown>,
+  body: Schema.Json,
   executeAction: ActionRunner = runAction,
   emitEvent?: ActionEventEmitter,
 ): Promise<Response> {
   if (action === "watchlist") {
-    const skills = body.skills;
-    if (skills === undefined || skills === null) {
-      return Response.json(
-        { success: false, error: "Missing required field: skills[]" },
-        { status: 400 },
-      );
-    }
-    if (!Array.isArray(skills) || !skills.every((skill) => typeof skill === "string")) {
+    const input = decodeWatchlist(body);
+    if (Option.isNone(input)) {
       return Response.json(
         {
           success: false,
           error: "Invalid type for skills: expected array of strings",
         },
+        { status: 400 },
+      );
+    }
+    const skills = input.value.skills;
+    if (skills === undefined || skills === null) {
+      return Response.json(
+        { success: false, error: "Missing required field: skills[]" },
         { status: 400 },
       );
     }
@@ -350,8 +348,23 @@ export async function handleAction(
     }
   }
 
-  const normalizedAction = action === "evolve" ? "deploy-candidate" : action;
-  const executable = buildActionExecution(normalizedAction as DashboardActionName, body);
+  const decodedAction = decodeActionName(action === "evolve" ? "deploy-candidate" : action);
+  if (Option.isNone(decodedAction)) {
+    return Response.json({ success: false, error: `Unknown action: ${action}` }, { status: 400 });
+  }
+  const input = decodeSkillActionInput(body);
+  if (Option.isNone(input)) {
+    return Response.json(
+      {
+        success: false,
+        error:
+          "Expected non-empty skill and skillPath strings, optional boolean autoSynthetic, and optional string proposalId.",
+      },
+      { status: 400 },
+    );
+  }
+  const normalizedAction = decodedAction.value;
+  const executable = buildActionExecution(normalizedAction, input.value);
   if (executable instanceof Response) {
     return executable;
   }
@@ -359,7 +372,7 @@ export async function handleAction(
   const eventId = randomUUID();
   emitEvent?.({
     event_id: eventId,
-    action: normalizedAction as DashboardActionName,
+    action: normalizedAction,
     stage: "started",
     skill_name: executable.skill,
     skill_path: executable.skillPath,
@@ -369,14 +382,14 @@ export async function handleAction(
   const result = await executeAction(executable.command, executable.args, {
     actionContext: {
       eventId,
-      action: normalizedAction as DashboardActionName,
+      action: normalizedAction,
       skillName: executable.skill,
       skillPath: executable.skillPath,
     },
     onStdout(chunk) {
       emitEvent?.({
         event_id: eventId,
-        action: normalizedAction as DashboardActionName,
+        action: normalizedAction,
         stage: "stdout",
         skill_name: executable.skill,
         skill_path: executable.skillPath,
@@ -387,7 +400,7 @@ export async function handleAction(
     onStderr(chunk) {
       emitEvent?.({
         event_id: eventId,
-        action: normalizedAction as DashboardActionName,
+        action: normalizedAction,
         stage: "stderr",
         skill_name: executable.skill,
         skill_path: executable.skillPath,
@@ -397,7 +410,7 @@ export async function handleAction(
     },
   });
   const outcome = resolveDashboardActionOutcome({
-    action: normalizedAction as DashboardActionName,
+    action: normalizedAction,
     stdout: result.output,
     stderr: result.error,
     exitCode: result.exitCode ?? 0,
@@ -405,7 +418,7 @@ export async function handleAction(
 
   emitEvent?.({
     event_id: eventId,
-    action: normalizedAction as DashboardActionName,
+    action: normalizedAction,
     stage: "finished",
     skill_name: executable.skill,
     skill_path: executable.skillPath,

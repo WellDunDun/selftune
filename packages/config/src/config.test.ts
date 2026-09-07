@@ -255,6 +255,43 @@ describe("writeConfig", () => {
 });
 
 describe("synchronous config compatibility", () => {
+  it.effect("keeps sync and async rejection aligned without rewriting malformed data", () =>
+    withTemporaryDirectory((directory) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = join(directory, "config.json");
+        for (const source of [
+          "{",
+          "null",
+          "[]",
+          "42",
+          "{}",
+          JSON.stringify({ ...validConfig, hooks_installed: "false" }),
+        ]) {
+          yield* fs.writeFileString(path, source);
+          const failure = yield* Effect.flip(loadConfig(path));
+          expect(failure).toBeInstanceOf(ConfigParseError);
+          if (failure instanceof ConfigParseError) expect(failure.path).toBe(path);
+          expect(() => loadConfigSync(path)).toThrow(ConfigParseError);
+          expect(yield* fs.readFileString(path)).toBe(source);
+        }
+      }),
+    ),
+  );
+
+  it.effect("distinguishes missing files from filesystem failures in both loaders", () =>
+    withTemporaryDirectory((directory) =>
+      Effect.gen(function* () {
+        const missing = join(directory, "absent.json");
+        expect(loadConfigSync(missing)).toBeNull();
+        expect(yield* loadConfig(missing)).toBeNull();
+        expect(() => loadConfigSync(directory)).toThrow();
+        const failure = yield* Effect.flip(loadConfig(directory));
+        expect(failure).not.toBeInstanceOf(ConfigParseError);
+      }),
+    ),
+  );
+
   it("uses the same validated atomic private writer", () => {
     const directory = mkdtempSync(join(tmpdir(), "selftune-config-sync-"));
     const path = join(directory, "nested", "config.json");

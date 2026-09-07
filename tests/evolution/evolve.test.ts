@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -127,7 +127,7 @@ const mockBuildEvalSet = mock(
     return [
       { query: "test query", should_trigger: true },
       { query: "unrelated", should_trigger: false },
-    ] as EvalEntry[];
+    ] satisfies EvalEntry[];
   },
 );
 
@@ -154,10 +154,7 @@ function makeDeps(): EvolveDeps {
 
 let tmpDirs: string[] = [];
 
-function createTempSkill(skillContent = "# Test Skill\nA skill for testing"): {
-  skillPath: string;
-  skillDir: string;
-} {
+function createTempSkill(skillContent = "# Test Skill\nA skill for testing") {
   const skillDir = join(
     tmpdir(),
     `selftune-test-evolve-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -190,11 +187,9 @@ afterEach(() => {
 
   // Reset all mocks to default behavior
   mockExtractFailurePatterns.mockReset();
-  mockExtractFailurePatterns.mockImplementation(
-    (_evalEntries: unknown, _skillUsage: unknown, _skillName: unknown) => {
-      return [makeFailurePattern()];
-    },
-  );
+  mockExtractFailurePatterns.mockImplementation(() => {
+    return [makeFailurePattern()];
+  });
 
   mockGenerateProposal.mockReset();
   mockGenerateProposal.mockImplementation(async () => makeProposal());
@@ -263,13 +258,13 @@ describe("evolve orchestrator", () => {
 
     // Verify no "deployed" audit entry was written
     const deployedCalls = mockAppendAuditEntry.mock.calls.filter(
-      (call: unknown[]) => (call[0] as EvolutionAuditEntry).action === "deployed",
+      (call) => call[0].action === "deployed",
     );
     expect(deployedCalls.length).toBe(0);
   });
 
   test("sync-first refreshes source truth before building evals", async () => {
-    const syncMock = mock((_request?: { force?: boolean; dryRun?: boolean }) => ({
+    const syncMock = mock(async (_request?: { force?: boolean; dryRun?: boolean }) => ({
       since: null,
       dry_run: false,
       sources: {
@@ -302,9 +297,7 @@ describe("evolve orchestrator", () => {
     });
 
     expect(syncMock).toHaveBeenCalledTimes(1);
-    const firstSyncCall = syncMock.mock.calls[0] as unknown[] | undefined;
-    const syncArgs = firstSyncCall?.[0] as Record<string, unknown> | undefined;
-    expect(syncArgs).toEqual({ force: true });
+    expect(syncMock.mock.calls[0]?.[0]).toEqual({ force: true });
     expect(result.sync_result?.repair.repaired_records).toBe(7);
   });
 
@@ -397,7 +390,7 @@ describe("evolve orchestrator", () => {
 
     // Should have a "rejected" audit entry for validation failure
     const rejectedCalls = mockAppendAuditEntry.mock.calls.filter(
-      (call: unknown[]) => (call[0] as EvolutionAuditEntry).action === "rejected",
+      (call) => call[0].action === "rejected",
     );
     expect(rejectedCalls.length).toBeGreaterThanOrEqual(1);
   });
@@ -415,25 +408,19 @@ describe("evolve orchestrator", () => {
 
     // Verify "deployed" audit entry was written
     const deployedCalls = mockAppendAuditEntry.mock.calls.filter(
-      (call: unknown[]) => (call[0] as EvolutionAuditEntry).action === "deployed",
+      (call) => call[0].action === "deployed",
     );
     expect(deployedCalls.length).toBe(1);
 
-    const evidenceStages = mockAppendEvidenceEntry.mock.calls.map(
-      (call: unknown[]) => (call[0] as EvolutionEvidenceEntry).stage,
-    );
+    const evidenceStages = mockAppendEvidenceEntry.mock.calls.map((call) => call[0].stage);
     expect(evidenceStages).toContain("created");
     expect(evidenceStages).toContain("validated");
     expect(evidenceStages).toContain("deployed");
 
     const createdAudit = mockAppendAuditEntry.mock.calls.find(
-      (call: unknown[]) => (call[0] as EvolutionAuditEntry).action === "created",
+      (call) => call[0].action === "created",
     );
-    expect(
-      (createdAudit?.[0] as EvolutionAuditEntry | undefined)?.details.startsWith(
-        "original_description:",
-      ),
-    ).toBe(true);
+    expect(createdAudit?.[0]?.details.startsWith("original_description:")).toBe(true);
   });
 
   // 6. Retry loop terminates at maxIterations
@@ -488,6 +475,40 @@ describe("evolve orchestrator", () => {
   });
 
   // 9. evalSetPath loads from file when provided
+  test.each([
+    "{invalid",
+    "null",
+    "{}",
+    "[null]",
+    '[{"query":42,"should_trigger":true}]',
+    '[{"query":"valid","should_trigger":"false"}]',
+    '[{"query":"valid"}]',
+  ])("rejects malformed explicit eval data before proposal work: %s", async (raw) => {
+    const evalSetPath = createTempEvalSet([]);
+    writeFileSync(evalSetPath, raw);
+    const opts = makeOptions({ evalSetPath });
+    const skillBytes = readFileSync(opts.skillPath, "utf8");
+    const result = await evolve(opts, makeDeps());
+    expect(result.deployed).toBe(false);
+    expect(result.proposal).toBeNull();
+    expect(result.reason).toContain("Failed to load eval set");
+    expect(mockBuildEvalSet).not.toHaveBeenCalled();
+    expect(mockExtractFailurePatterns).not.toHaveBeenCalled();
+    expect(mockGenerateProposal).not.toHaveBeenCalled();
+    expect(readFileSync(opts.skillPath, "utf8")).toBe(skillBytes);
+    expect(readFileSync(evalSetPath, "utf8")).toBe(raw);
+  });
+
+  test("does not substitute local logs for a missing explicit eval file", async () => {
+    const opts = makeOptions();
+    opts.evalSetPath = join(opts.skillPath, "missing-evals.json");
+    const result = await evolve(opts, makeDeps());
+    expect(result.reason).toContain("Failed to load eval set");
+    expect(result.deployed).toBe(false);
+    expect(mockBuildEvalSet).not.toHaveBeenCalled();
+    expect(mockGenerateProposal).not.toHaveBeenCalled();
+  });
+
   test("uses evalSetPath when provided instead of building from logs", async () => {
     const evalEntries: EvalEntry[] = [
       { query: "custom eval query", should_trigger: true },
@@ -633,15 +654,13 @@ describe("evolve orchestrator", () => {
     expect(result.gateValidation?.improved).toBe(false);
 
     const rejectedCalls = mockAppendAuditEntry.mock.calls.filter(
-      (call: unknown[]) => (call[0] as EvolutionAuditEntry).action === "rejected",
+      (call) => call[0].action === "rejected",
     );
     expect(rejectedCalls.length).toBeGreaterThanOrEqual(1);
-    expect((rejectedCalls[rejectedCalls.length - 1][0] as EvolutionAuditEntry).details).toContain(
-      "Gate validation failed",
-    );
+    expect(rejectedCalls[rejectedCalls.length - 1][0].details).toContain("Gate validation failed");
 
     const rejectedEvidence = mockAppendEvidenceEntry.mock.calls.filter(
-      (call: unknown[]) => (call[0] as EvolutionEvidenceEntry).stage === "rejected",
+      (call) => call[0].stage === "rejected",
     );
     expect(rejectedEvidence.length).toBeGreaterThanOrEqual(1);
   });
@@ -758,10 +777,10 @@ describe("evolve orchestrator", () => {
     expect(result.deployed).toBe(true);
     // Audit should record llm_judge
     const validatedAudits = mockAppendAuditEntry.mock.calls.filter(
-      (call: unknown[]) => (call[0] as EvolutionAuditEntry).action === "validated",
+      (call) => call[0].action === "validated",
     );
     expect(validatedAudits.length).toBeGreaterThanOrEqual(1);
-    const lastValidated = validatedAudits[validatedAudits.length - 1][0] as EvolutionAuditEntry;
+    const lastValidated = validatedAudits[validatedAudits.length - 1][0];
     expect(lastValidated.validation_mode).toBe("llm_judge");
   });
 
@@ -780,10 +799,10 @@ describe("evolve orchestrator", () => {
     expect(result.deployed).toBe(true);
     // Audit should record llm_judge since replay was not available
     const validatedAudits = mockAppendAuditEntry.mock.calls.filter(
-      (call: unknown[]) => (call[0] as EvolutionAuditEntry).action === "validated",
+      (call) => call[0].action === "validated",
     );
     expect(validatedAudits.length).toBeGreaterThanOrEqual(1);
-    const lastValidated = validatedAudits[validatedAudits.length - 1][0] as EvolutionAuditEntry;
+    const lastValidated = validatedAudits[validatedAudits.length - 1][0];
     expect(lastValidated.validation_mode).toBe("llm_judge");
   });
 
@@ -831,10 +850,10 @@ describe("evolve orchestrator", () => {
     expect(result.deployed).toBe(true);
     // Audit should record host_replay
     const validatedAudits = mockAppendAuditEntry.mock.calls.filter(
-      (call: unknown[]) => (call[0] as EvolutionAuditEntry).action === "validated",
+      (call) => call[0].action === "validated",
     );
     expect(validatedAudits.length).toBeGreaterThanOrEqual(1);
-    const lastValidated = validatedAudits[validatedAudits.length - 1][0] as EvolutionAuditEntry;
+    const lastValidated = validatedAudits[validatedAudits.length - 1][0];
     expect(lastValidated.validation_mode).toBe("host_replay");
   });
 
@@ -858,10 +877,10 @@ describe("evolve orchestrator", () => {
 
     // Check the deployed audit entry
     const deployedAudits = mockAppendAuditEntry.mock.calls.filter(
-      (call: unknown[]) => (call[0] as EvolutionAuditEntry).action === "deployed",
+      (call) => call[0].action === "deployed",
     );
     expect(deployedAudits.length).toBe(1);
-    const deployedAudit = deployedAudits[0][0] as EvolutionAuditEntry;
+    const deployedAudit = deployedAudits[0][0];
     expect(deployedAudit.validation_mode).toBe("llm_judge");
   });
 
@@ -977,9 +996,9 @@ describe("evolve orchestrator", () => {
 
   // 15. Retry feeds failure reason into subsequent proposal attempts
   test("retry loop feeds failure reason back to next iteration", async () => {
-    const capturedArgs: unknown[][] = [];
+    const capturedArgs: Parameters<typeof mockGenerateProposal>[] = [];
 
-    mockGenerateProposal.mockImplementation(async (...args: unknown[]) => {
+    mockGenerateProposal.mockImplementation(async (...args) => {
       capturedArgs.push(args);
       return makeProposal({ confidence: 0.9 });
     });

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 
 import {
   materializeSkillsShCatalogEntry,
@@ -12,7 +12,7 @@ import {
   type SkillsShCatalogMaterializationProgress,
 } from "../../packages/library/src/skills-sh-catalog.js";
 
-function jsonResponse(body: unknown, status = 200): Response {
+function jsonResponse(body: typeof Schema.Json.Type, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
@@ -117,6 +117,20 @@ describe("skills.sh catalog discovery", () => {
     expect(decodeFailure).toMatchObject({ _tag: "SkillsShCatalogDecodeError" });
   });
 
+  test.each(["{broken", "null", "[]", '{"skills":false}'])(
+    "classifies malformed catalog JSON: %s",
+    async (body) => {
+      const failure = await Effect.runPromise(
+        Effect.flip(
+          searchSkillsShCatalog("flutter", {
+            fetcher: async () => new Response(body),
+          }),
+        ),
+      );
+      expect(failure).toMatchObject({ _tag: "SkillsShCatalogDecodeError" });
+    },
+  );
+
   test("rejects oversized responses before decoding", async () => {
     const failure = await Effect.runPromise(
       Effect.flip(
@@ -152,7 +166,7 @@ function downloadPayload(
     hash: string | null;
     files: Array<{ path: string; contents: string; type?: string; mode?: string | number }> | null;
   }> = {},
-): unknown {
+) {
   return {
     hash: "a".repeat(64),
     files: [

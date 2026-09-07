@@ -68,9 +68,7 @@ export function detectLocalHarnessConnections(
   });
 }
 
-export function localHarnessSettingsEnvironment(): {
-  loadHarnessConnections: () => HarnessConnection[];
-} {
+export function localHarnessSettingsEnvironment() {
   return { loadHarnessConnections: () => detectLocalHarnessConnections() };
 }
 

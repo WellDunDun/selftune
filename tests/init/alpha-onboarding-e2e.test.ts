@@ -1,24 +1,24 @@
 /**
- * E2E smoke test: fresh config → alpha-enrolled → upload-ready
+ * Local integration test: fresh config → device-code approval → linked account.
  *
  * Since alpha enrollment uses the device-code flow (browser auth),
  * these tests mock fetch to simulate the cloud API responses.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { installFetchSpy } from "../helpers/fetch-spy.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { getAlphaLinkState, readAlphaIdentity } from "../../packages/runtime/alpha-identity.js";
-import { runInit } from "../../packages/orchestration/src/init.js";
+import { runInit, type InitOptions } from "../../packages/orchestration/src/init.js";
 import { checkAlphaReadiness } from "../../packages/runtime/init.js";
 import { checkCloudLinkHealth } from "../../packages/runtime/observability.js";
 import { resolveCloudCredential } from "../../packages/runtime/auth/cloud-credential.js";
 import type { PlatformCredentialStore } from "../../packages/runtime/credential-store.js";
 
 let tmpDir: string;
-const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
 let credentials: Map<string, string>;
 let credentialStore: PlatformCredentialStore;
@@ -27,8 +27,8 @@ function mockDeviceCodeFlow(): void {
   process.env.SELFTUNE_ALPHA_ENDPOINT = "https://test.local/api/v1/push";
   process.env.SELFTUNE_NO_BROWSER = "1";
   let pollCount = 0;
-  globalThis.fetch = (async (url: string) => {
-    if (url.endsWith("/device-code/poll")) {
+  installFetchSpy(async (url) => {
+    if (String(url) === "https://test.local/api/v1/device-code/poll") {
       pollCount++;
       if (pollCount < 2) {
         return new Response(JSON.stringify({ status: "pending" }), { status: 200 });
@@ -43,7 +43,9 @@ function mockDeviceCodeFlow(): void {
         { status: 200 },
       );
     }
-    // /device-code request
+    if (String(url) !== "https://test.local/api/v1/device-code") {
+      throw new Error(`Unexpected request: ${url}`);
+    }
     return new Response(
       JSON.stringify({
         device_code: "dc_e2e",
@@ -54,10 +56,13 @@ function mockDeviceCodeFlow(): void {
       }),
       { status: 200 },
     );
-  }) as unknown as typeof globalThis.fetch;
+  });
 }
 
 beforeEach(() => {
+  installFetchSpy(async () => {
+    throw new Error("Unexpected network request");
+  });
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-onboarding-e2e-"));
   credentials = new Map();
   credentialStore = {
@@ -74,11 +79,11 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
-  globalThis.fetch = originalFetch;
+  mock.restore();
   process.env = { ...originalEnv };
 });
 
-function makeInitOpts(overrides: Record<string, unknown> = {}) {
+function makeInitOpts(overrides: Partial<InitOptions> = {}): InitOptions {
   const configDir = join(tmpDir, ".selftune");
   const configPath = join(configDir, "config.json");
   return {
@@ -94,7 +99,7 @@ function makeInitOpts(overrides: Record<string, unknown> = {}) {
 }
 
 describe("Agent-first alpha onboarding E2E", () => {
-  test("fresh config → selftune init --alpha → device-code → upload-ready", async () => {
+  test("fresh config → selftune init --alpha → device-code → linked account", async () => {
     mockDeviceCodeFlow();
     const opts = makeInitOpts();
 
@@ -139,25 +144,11 @@ describe("Agent-first alpha onboarding E2E", () => {
     expect(healthChecks.length).toBeGreaterThan(0);
   });
 
-  test("--alpha triggers device-code flow", async () => {
-    mockDeviceCodeFlow();
-
-    const config = await runInit(
-      makeInitOpts({
-        alpha: true,
-        alphaEmail: "user@example.com",
-      }),
-    );
-
-    expect(config.alpha?.enrolled).toBe(true);
-    expect(config.alpha?.cloud_user_id).toBe("cloud-user-e2e");
-  });
-
   test("device-code flow failure propagates error", async () => {
     process.env.SELFTUNE_ALPHA_ENDPOINT = "https://test.local/api/v1/push";
-    globalThis.fetch = (async () => {
+    installFetchSpy(async () => {
       return new Response("Server Error", { status: 500, statusText: "Internal Server Error" });
-    }) as unknown as typeof globalThis.fetch;
+    });
 
     await expect(
       runInit(

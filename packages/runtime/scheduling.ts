@@ -220,7 +220,7 @@ export function buildLaunchdDefinition(
   entry: ScheduleEntry,
   binPath?: string,
   homeDir = homedir(),
-): { label: string; content: string } {
+) {
   const label = `com.selftune.${entry.name.replace("selftune-", "")}`;
   const resolvedBin = binPath ?? resolveSelftuneBin();
   // Replace bare `selftune` with the resolved absolute path
@@ -282,11 +282,7 @@ export function buildSystemdDefinition(
   entry: ScheduleEntry,
   binPath?: string,
   homeDir = homedir(),
-): {
-  baseName: string;
-  timerContent: string;
-  serviceContent: string;
-} {
+) {
   const unitName = entry.name;
   const calendar = cronToOnCalendar(entry.schedule);
   const resolvedBin = binPath ?? resolveSelftuneBin();
@@ -358,10 +354,7 @@ export function selectInstallFormat(
   return { ok: true, format: "cron" };
 }
 
-export function buildInstallPlan(
-  format: ScheduleFormat,
-  homeDir = homedir(),
-): { artifacts: ScheduleInstallArtifact[]; activationCommands: string[] } {
+export function buildInstallPlan(format: ScheduleFormat, homeDir = homedir()) {
   if (format === "cron") {
     const path = join(homeDir, ".selftune", "schedule", "selftune.crontab");
     return {
@@ -508,7 +501,7 @@ const VALID_FORMATS = ["cron", "launchd", "systemd"] as const;
 export type ScheduleFormat = (typeof VALID_FORMATS)[number];
 
 function isValidFormat(value: string): value is ScheduleFormat {
-  return (VALID_FORMATS as readonly string[]).includes(value);
+  return VALID_FORMATS.some((format) => format === value);
 }
 
 export function formatOutput(
@@ -550,13 +543,13 @@ export function cliMain(): void {
       "apply-cron-artifact": { type: "string" },
       help: { type: "boolean", default: false },
     },
-    strict: false,
+    strict: true,
     allowPositionals: true,
   });
 
   if (values["apply-cron-artifact"]) {
     try {
-      applyCronArtifact(values["apply-cron-artifact"] as string);
+      applyCronArtifact(values["apply-cron-artifact"]);
       return;
     } catch (err) {
       throw new CLIError(
@@ -592,7 +585,7 @@ For OpenClaw-specific scheduling, see: selftune cron`);
   if (values.install) {
     try {
       const result = installSchedule({
-        format: typeof values.format === "string" ? values.format : undefined,
+        format: values.format,
         dryRun: values["dry-run"] === true,
       });
       if (!result.dryRun && !result.activated) {
@@ -626,7 +619,7 @@ For OpenClaw-specific scheduling, see: selftune cron`);
     }
   }
 
-  const result = formatOutput(typeof values.format === "string" ? values.format : undefined);
+  const result = formatOutput(values.format);
   if (!result.ok) {
     throw new CLIError(
       result.error ?? "Invalid schedule format",

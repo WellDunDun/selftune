@@ -7,6 +7,7 @@ import { processPrompt } from "@selftune/harness-claude-code/hooks/prompt-log";
 import {
   maybeSpawnReactiveOrchestrate,
   processSessionStop,
+  runSessionStopHook,
 } from "@selftune/harness-claude-code/hooks/session-stop";
 import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
 import { writeImprovementSignalToDb } from "../../packages/runtime/localdb/direct-write.js";
@@ -32,19 +33,30 @@ afterEach(() => {
 /** Helper to count session telemetry rows in the test database. */
 function telemetryCount(): number {
   const db = getDb();
-  const row = db.query("SELECT COUNT(*) as cnt FROM session_telemetry").get() as { cnt: number };
-  return row.cnt;
+  return db.query<{ cnt: number }, []>("SELECT COUNT(*) as cnt FROM session_telemetry").get()!.cnt;
 }
 
 /** Helper to read session telemetry from the test database. */
 function querySessionTelemetry(): Array<{ session_id: string }> {
   const db = getDb();
-  return db.query("SELECT session_id FROM session_telemetry ORDER BY timestamp").all() as Array<{
-    session_id: string;
-  }>;
+  return db
+    .query<{ session_id: string }, []>(
+      "SELECT session_id FROM session_telemetry ORDER BY timestamp",
+    )
+    .all();
 }
 
 describe("session-stop hook", () => {
+  test.each(["null", "[]", '{"session_id":42}', '{"cwd":[]}'])(
+    "does not persist a malformed stdin payload: %s",
+    async (rawStdin) => {
+      const result = await runSessionStopHook(rawStdin);
+      expect(result.exit_code).toBe(0);
+      expect(result.stdout).toBe("");
+      expect(telemetryCount()).toBe(0);
+    },
+  );
+
   test("extracts metrics from transcript", async () => {
     const transcriptPath = join(tmpDir, "transcript.jsonl");
     const lines = [

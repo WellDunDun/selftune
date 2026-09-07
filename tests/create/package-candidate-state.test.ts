@@ -1,5 +1,6 @@
+import type { CreatePackageEvaluationResult } from "../../packages/runtime/create/package-evaluator.js";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,7 +16,14 @@ import {
   readPackageCandidateArtifact,
   readPackageCandidateArtifactByFingerprint,
   selectAcceptedPackageFrontierCandidate,
+  getPackageCandidateArtifactPath,
 } from "../../packages/runtime/create/package-candidate-state.js";
+
+function requireCandidateId(evaluation: CreatePackageEvaluationResult): string {
+  const id = evaluation.summary.candidate_id;
+  if (!id) throw new Error("Expected a persisted candidate identity.");
+  return id;
+}
 
 let db: Database;
 let tempRoot: string;
@@ -37,7 +45,7 @@ function makeEvaluation(
     watchAlert?: string | null;
     watchRolledBack?: boolean;
   } = {},
-) {
+): CreatePackageEvaluationResult {
   const skillName = options.skillName ?? "research-assistant";
   const replayPassRate = options.replayPassRate ?? 1;
   const baselineLift = options.baselineLift ?? 0.5;
@@ -46,7 +54,7 @@ function makeEvaluation(
   const totalUnitTests = 4;
   const passedUnitTests = Math.round(unitTestPassRate * totalUnitTests);
   const failedUnitTests = totalUnitTests - passedUnitTests;
-  return {
+  const result: CreatePackageEvaluationResult = {
     summary: {
       skill_name: skillName,
       skill_path: `/tmp/${skillName}/SKILL.md`,
@@ -92,61 +100,6 @@ function makeEvaluation(
         run_at: "2026-04-15T09:10:00.000Z",
         failing_tests: [],
       },
-      ...(options.gradingPassRateDelta != null ||
-      options.gradingRecentPassRate != null ||
-      options.gradingRegressed != null
-        ? {
-            grading: {
-              baseline: {
-                proposal_id: "proposal-baseline",
-                measured_at: "2026-04-15T08:00:00.000Z",
-                pass_rate: 0.7,
-                mean_score: 0.8,
-                sample_size: 6,
-              },
-              recent: {
-                sample_size: 6,
-                average_pass_rate: options.gradingRecentPassRate ?? 0.7,
-                average_mean_score: 0.82,
-                newest_graded_at: "2026-04-15T09:30:00.000Z",
-                oldest_graded_at: "2026-04-15T09:00:00.000Z",
-              },
-              pass_rate_delta: options.gradingPassRateDelta ?? null,
-              mean_score_delta: null,
-              regressed: options.gradingRegressed ?? null,
-            },
-          }
-        : {}),
-      ...(options.watchAlert != null || options.watchRolledBack
-        ? {
-            watch: {
-              snapshot: {
-                timestamp: "2026-04-15T10:00:00.000Z",
-                skill_name: skillName,
-                window_sessions: 6,
-                skill_checks: 6,
-                pass_rate: 5 / 6,
-                false_negative_rate: 0,
-                by_invocation_type: {
-                  explicit: { passed: 2, total: 2 },
-                  implicit: { passed: 2, total: 2 },
-                  contextual: { passed: 1, total: 1 },
-                  negative: { passed: 0, total: 1 },
-                },
-                regression_detected: options.watchAlert != null,
-                baseline_pass_rate: 0.9,
-              },
-              alert: options.watchAlert ?? null,
-              rolled_back: options.watchRolledBack ?? false,
-              recommendation: options.watchAlert ? "rollback" : "continue",
-              recommended_command: options.watchAlert
-                ? `selftune rollback --skill ${skillName}`
-                : null,
-              grade_alert: null,
-              grade_regression: null,
-            },
-          }
-        : {}),
     },
     replay: {
       skill: skillName,
@@ -160,6 +113,18 @@ function makeEvaluation(
       pass_rate: replayPassRate,
       fixture_id: "fixture-package",
       results: [],
+      runtime_metrics: {
+        eval_runs: 0,
+        usage_observations: 0,
+        total_duration_ms: 0,
+        avg_duration_ms: 0,
+        total_input_tokens: null,
+        total_output_tokens: null,
+        total_cache_creation_input_tokens: null,
+        total_cache_read_input_tokens: null,
+        total_cost_usd: null,
+        total_turns: null,
+      },
     },
     baseline: {
       skill_name: skillName,
@@ -172,6 +137,56 @@ function makeEvaluation(
       measured_at: "2026-04-15T09:00:00.000Z",
     },
   };
+  if (options.watchAlert != null || options.watchRolledBack)
+    result.summary.watch = {
+      snapshot: {
+        timestamp: "2026-04-15T10:00:00.000Z",
+        skill_name: skillName,
+        window_sessions: 6,
+        skill_checks: 6,
+        pass_rate: 5 / 6,
+        false_negative_rate: 0,
+        by_invocation_type: {
+          explicit: { passed: 2, total: 2 },
+          implicit: { passed: 2, total: 2 },
+          contextual: { passed: 1, total: 1 },
+          negative: { passed: 0, total: 1 },
+        },
+        regression_detected: options.watchAlert != null,
+        baseline_pass_rate: 0.9,
+      },
+      alert: options.watchAlert ?? null,
+      rolled_back: options.watchRolledBack ?? false,
+      recommendation: options.watchAlert ? "rollback" : "continue",
+      recommended_command: options.watchAlert ? `selftune rollback --skill ${skillName}` : null,
+      grade_alert: null,
+      grade_regression: null,
+    };
+  if (
+    options.gradingPassRateDelta != null ||
+    options.gradingRecentPassRate != null ||
+    options.gradingRegressed != null
+  )
+    result.summary.grading = {
+      baseline: {
+        proposal_id: "proposal-baseline",
+        measured_at: "2026-04-15T08:00:00.000Z",
+        pass_rate: 0.7,
+        mean_score: 0.8,
+        sample_size: 6,
+      },
+      recent: {
+        sample_size: 6,
+        average_pass_rate: options.gradingRecentPassRate ?? 0.7,
+        average_mean_score: 0.82,
+        newest_graded_at: "2026-04-15T09:30:00.000Z",
+        oldest_graded_at: "2026-04-15T09:00:00.000Z",
+      },
+      pass_rate_delta: options.gradingPassRateDelta ?? null,
+      mean_score_delta: null,
+      regressed: options.gradingRegressed ?? null,
+    };
+  return result;
 }
 
 beforeEach(() => {
@@ -190,6 +205,49 @@ afterEach(() => {
 });
 
 describe("package candidate state", () => {
+  it("rejects malformed artifacts instead of accepting a partial evaluation", () => {
+    const evaluation = persistPackageCandidateEvaluation(
+      makeEvaluation("pkg_sha256_boundary0001"),
+      db,
+    );
+    const candidateId = requireCandidateId(evaluation);
+    const path = getPackageCandidateArtifactPath(evaluation.summary.skill_name, candidateId);
+    for (const artifact of [
+      null,
+      [],
+      {},
+      {
+        summary: { skill_name: "research-assistant", status: "passed", evaluation_passed: true },
+        replay: { skill: "research-assistant" },
+        baseline: { skill_name: "research-assistant" },
+      },
+      { ...evaluation, summary: { ...evaluation.summary, status: "invented" } },
+      { ...evaluation, replay: { ...evaluation.replay, total: "2" } },
+    ]) {
+      writeFileSync(path, JSON.stringify(artifact));
+      expect(readPackageCandidateArtifact(evaluation.summary.skill_name, candidateId)).toBeNull();
+    }
+    writeFileSync(path, JSON.stringify(evaluation));
+    expect(readPackageCandidateArtifact(evaluation.summary.skill_name, candidateId)).toEqual(
+      evaluation,
+    );
+  });
+
+  it("omits an invalid stored summary without losing neighboring candidates", () => {
+    const invalid = persistPackageCandidateEvaluation(
+      makeEvaluation("pkg_sha256_boundary0001"),
+      db,
+    );
+    const valid = persistPackageCandidateEvaluation(makeEvaluation("pkg_sha256_boundary0002"), db);
+    db.run("UPDATE package_candidates SET summary_json = ? WHERE candidate_id = ?", [
+      JSON.stringify({ ...invalid.summary, evaluation_passed: "yes" }),
+      requireCandidateId(invalid),
+    ]);
+    expect(
+      listPackageCandidates("research-assistant", db).map((candidate) => candidate.candidate_id),
+    ).toEqual([requireCandidateId(valid)]);
+  });
+
   it("creates a root candidate with a candidate-specific archived evaluation artifact", () => {
     const persisted = persistPackageCandidateEvaluation(
       makeEvaluation("pkg_sha256_rootcandidate1234"),
@@ -199,10 +257,12 @@ describe("package candidate state", () => {
     expect(persisted.summary.candidate_id).toMatch(/^pkgcand_research-assistant_/);
     expect(persisted.summary.parent_candidate_id).toBeNull();
     expect(persisted.summary.candidate_generation).toBe(0);
-    expect(persisted.summary.candidate_acceptance).toEqual({
+    const acceptance = persisted.summary.candidate_acceptance;
+    if (!acceptance) throw new Error("Expected root candidate acceptance.");
+    expect(acceptance).toEqual({
       decision: "root",
       compared_to_candidate_id: null,
-      decided_at: persisted.summary.candidate_acceptance?.decided_at,
+      decided_at: acceptance.decided_at,
       rationale: "Initial measured package candidate for this skill.",
       replay_pass_rate_delta: null,
       routing_pass_rate_delta: null,
@@ -213,7 +273,7 @@ describe("package candidate state", () => {
 
     const candidates = listPackageCandidates("research-assistant", db);
     expect(candidates).toHaveLength(1);
-    expect(candidates[0]?.candidate_id).toBe(persisted.summary.candidate_id);
+    expect(candidates[0]?.candidate_id).toBe(requireCandidateId(persisted));
     expect(candidates[0]?.latest_acceptance_decision).toBe("root");
     expect(candidates[0]?.artifact_path).toContain(`${persisted.summary.candidate_id}.json`);
     expect(
@@ -234,11 +294,11 @@ describe("package candidate state", () => {
       db,
     );
 
-    expect(child.summary.parent_candidate_id).toBe(root.summary.candidate_id);
+    expect(child.summary.parent_candidate_id).toBe(requireCandidateId(root));
     expect(child.summary.candidate_generation).toBe(1);
     expect(child.summary.candidate_acceptance?.decision).toBe("accepted");
     expect(child.summary.candidate_acceptance?.compared_to_candidate_id).toBe(
-      root.summary.candidate_id,
+      requireCandidateId(root),
     );
     expect(child.summary.candidate_acceptance?.baseline_lift_delta).toBeCloseTo(0.2, 5);
 
@@ -264,7 +324,7 @@ describe("package candidate state", () => {
       db,
     );
 
-    expect(child.summary.parent_candidate_id).toBe(root.summary.candidate_id);
+    expect(child.summary.parent_candidate_id).toBe(requireCandidateId(root));
     expect(child.summary.candidate_acceptance?.decision).toBe("rejected");
     expect(child.summary.candidate_acceptance?.rationale).toContain("Measured regressions");
     expect(child.summary.candidate_acceptance?.replay_pass_rate_delta).toBeCloseTo(-0.5, 5);
@@ -302,7 +362,7 @@ describe("package candidate state", () => {
 
     expect(improved.summary.parent_candidate_id).toBe(rejected.summary.candidate_id);
     expect(improved.summary.candidate_acceptance?.compared_to_candidate_id).toBe(
-      root.summary.candidate_id,
+      requireCandidateId(root),
     );
     expect(improved.summary.candidate_acceptance?.decision).toBe("accepted");
     expect(improved.summary.candidate_acceptance?.baseline_lift_delta).toBeCloseTo(0.15, 5);
@@ -343,17 +403,17 @@ describe("package candidate state", () => {
 
     const acceptedFrontier = listAcceptedPackageFrontierCandidates("research-assistant", db);
     expect(acceptedFrontier.map((candidate) => candidate.candidate_id)).toEqual([
-      strongest.summary.candidate_id,
-      fresh.summary.candidate_id,
-      root.summary.candidate_id,
-      newerButNoisier.summary.candidate_id,
+      requireCandidateId(strongest),
+      requireCandidateId(fresh),
+      requireCandidateId(root),
+      requireCandidateId(newerButNoisier),
     ]);
     expect(selectAcceptedPackageFrontierCandidate("research-assistant", { db })?.candidate_id).toBe(
-      strongest.summary.candidate_id,
+      requireCandidateId(strongest),
     );
-    expect(fresh.summary.parent_candidate_id).toBe(newerButNoisier.summary.candidate_id);
+    expect(fresh.summary.parent_candidate_id).toBe(requireCandidateId(newerButNoisier));
     expect(fresh.summary.candidate_acceptance?.compared_to_candidate_id).toBe(
-      strongest.summary.candidate_id,
+      requireCandidateId(strongest),
     );
   });
 
@@ -476,13 +536,13 @@ describe("package candidate state", () => {
 
     const updatedStrongest = readPackageCandidateArtifact(
       "research-assistant",
-      strongest.summary.candidate_id!,
+      requireCandidateId(strongest)!,
     );
     expect(updatedStrongest?.summary.watch?.rolled_back).toBe(true);
 
     const candidates = listPackageCandidates("research-assistant", db);
     expect(
-      candidates.find((candidate) => candidate.candidate_id === strongest.summary.candidate_id)
+      candidates.find((candidate) => candidate.candidate_id === requireCandidateId(strongest))
         ?.evaluation_count,
     ).toBe(1);
     expect(selectAcceptedPackageFrontierCandidate("research-assistant", { db })?.candidate_id).toBe(

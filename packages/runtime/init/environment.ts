@@ -1,6 +1,8 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { AgentType } from "@selftune/config";
+import * as Schema from "effect/Schema";
 
 import { resolveSelftuneCliEntrypoint } from "../package-root.js";
 import type { SelftuneConfig } from "../types.js";
@@ -19,25 +21,18 @@ import type { SelftuneConfig } from "../types.js";
  *   5. Pi — ~/.pi/agent/ exists OR `which pi`
  *   6. "unknown" fallback
  */
-const VALID_AGENT_TYPES: SelftuneConfig["agent_type"][] = [
-  "claude_code",
-  "codex",
-  "opencode",
-  "openclaw",
-  "pi",
-  "unknown",
-];
-
-const AGENT_TYPE_CLI_MAP: Record<string, string> = {
-  claude_code: "claude",
-  codex: "codex",
-  opencode: "opencode",
-  openclaw: "openclaw",
-  pi: "pi",
-};
+const AGENT_TYPE_CLI_MAP = new Map(
+  Object.entries({
+    claude_code: "claude",
+    codex: "codex",
+    opencode: "opencode",
+    openclaw: "openclaw",
+    pi: "pi",
+  }),
+);
 
 export function agentTypeToCli(agentType: string): string | null {
-  return AGENT_TYPE_CLI_MAP[agentType] ?? null;
+  return AGENT_TYPE_CLI_MAP.get(agentType) ?? null;
 }
 
 export function detectAgentType(
@@ -45,8 +40,8 @@ export function detectAgentType(
   homeOverride?: string,
 ): SelftuneConfig["agent_type"] {
   if (override) {
-    if (VALID_AGENT_TYPES.includes(override as SelftuneConfig["agent_type"])) {
-      return override as SelftuneConfig["agent_type"];
+    if (Schema.is(AgentType)(override)) {
+      return override;
     }
     console.error(`[WARN] Unknown agent type "${override}", falling back to detection`);
   }
@@ -106,9 +101,6 @@ export function determineCliPath(override?: string): string {
 /**
  * Determine LLM mode and agent CLI based on available signals.
  */
-export function determineLlmMode(agentCli: string | null): {
-  llm_mode: "agent";
-  agent_cli: string | null;
-} {
-  return { llm_mode: "agent", agent_cli: agentCli };
+export function determineLlmMode(agentCli: string | null) {
+  return { llm_mode: "agent" as const, agent_cli: agentCli };
 }

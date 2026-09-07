@@ -179,7 +179,7 @@ describe("skill installation consolidation", () => {
       expect(realpathSync(result.items[0]?.canonical.library_package_path ?? "")).toBe(
         realpathSync(target),
       );
-      expect(typeof result.items[0]?.targets[0]?.archive_id).toBe("string");
+      expect(result.items[0]?.targets[0]?.archive_id).toBeString();
       expect(existsSync(result.items[0]?.targets[0]?.archive_destination ?? "")).toBe(true);
 
       const repeated = await Effect.runPromise(

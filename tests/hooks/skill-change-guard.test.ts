@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -68,6 +68,25 @@ describe("extractSkillNameFromPath", () => {
 // ---------------------------------------------------------------------------
 
 describe("skill-change-guard hook", () => {
+  test("replaces a malformed saved warning list before adding a skill", () => {
+    const statePath = join(tmpDir, "state.json");
+    writeFileSync(statePath, JSON.stringify({ session_id: "sess-1", warned_skills: [42] }));
+    expect(
+      processPreToolUse(
+        {
+          tool_name: "Write",
+          tool_input: { file_path: "/skills/pdf/SKILL.md" },
+          session_id: "sess-1",
+        },
+        statePath,
+      ),
+    ).toContain("selftune watch");
+    expect(JSON.parse(readFileSync(statePath, "utf8"))).toEqual({
+      session_id: "sess-1",
+      warned_skills: ["pdf"],
+    });
+  });
+
   test("returns suggestion for Write to SKILL.md", () => {
     const payload: PreToolUsePayload = {
       tool_name: "Write",

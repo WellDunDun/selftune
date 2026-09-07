@@ -35,7 +35,7 @@ export function truncateReplayText(
   value: string | null | undefined,
   maxLength: number,
 ): string | null {
-  if (typeof value !== "string") return null;
+  if (value === null || value === undefined) return null;
   const normalized = value.replace(/\s+/g, " ").trim();
   if (!normalized) return null;
   if (normalized.length <= maxLength) return normalized;
@@ -103,15 +103,16 @@ export function buildRoutingReplayFixture(options: {
     options.workspaceRoot ?? findGitRepositoryRoot(dirname(dirname(targetSkillPath)));
   const platform = options.platform ?? "claude_code";
 
-  return {
+  const fixture: RoutingReplayFixture = {
     fixture_id: options.fixtureId ?? `auto-${platform}-${options.skillName}`,
     platform,
     target_skill_name: options.skillName,
     target_skill_path: targetSkillPath,
     competing_skill_paths: listCompetingSkillPaths(targetSkillPath),
-    ...(workspaceRoot ? { workspace_root: workspaceRoot } : {}),
-    ...(options.stagingMode ? { skill_staging_mode: options.stagingMode } : {}),
   };
+  if (workspaceRoot) fixture.workspace_root = workspaceRoot;
+  if (options.stagingMode) fixture.skill_staging_mode = options.stagingMode;
+  return fixture;
 }
 
 function buildRuntimeReplayTargetContent(

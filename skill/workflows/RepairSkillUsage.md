@@ -43,6 +43,10 @@ selftune repair-skill-usage
 
 ## Output Format
 
+Transcript fields and custom lookup logs are validated before use. Malformed
+optional content does not discard valid sibling evidence. A Claude transcript
+without a decoded user or assistant message is not marked as repaired.
+
 JSON summary printed to stdout:
 
 ```json

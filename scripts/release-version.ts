@@ -29,9 +29,13 @@ function parsePackageManifest(path: string): PackageManifest {
   } catch (cause) {
     throw new Error(`Could not parse ${path} as JSON.`, { cause });
   }
+  // SAFETY-TYPEOF: Package manifests cross a JSON/file boundary; require an object with a string
+  // version before preserving its fields and applying the release-version contract.
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`${path} must contain a JSON object.`);
   }
+  // SAFETY-TYPEOF: The parsed manifest's version must be a string before SemVer validation and
+  // before it can become the authority for coupled release writes.
   if (!("version" in value) || typeof value.version !== "string") {
     throw new Error(`${path} must contain a string version.`);
   }

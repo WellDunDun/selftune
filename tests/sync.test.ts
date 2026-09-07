@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import assert from "node:assert/strict";
 import type { Database } from "bun:sqlite";
 import * as Effect from "effect/Effect";
 
@@ -219,7 +220,7 @@ describe("syncSources", () => {
       ),
     );
 
-    expect(failure._tag).toBe("HarnessSourceSyncFailure");
+    assert.equal(failure._tag, "HarnessSourceSyncFailure");
     expect(failure.adapter_id).toBe("claude_code");
     expect(failure.operation).toBe("resolve source adapter");
   });

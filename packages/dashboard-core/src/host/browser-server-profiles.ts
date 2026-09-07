@@ -1,4 +1,5 @@
-import { FEATURE_KEYS, type DashboardFeatureFlags, type DashboardHostKind } from "./capabilities";
+import { z } from "zod";
+import { FEATURE_KEYS, type DashboardFeatureFlags } from "./capabilities";
 import {
   createManagedServerProfile,
   createServerProfileController,
@@ -15,16 +16,58 @@ export const SERVER_PROFILE_CONTRACT_PATH = "/api/server-profile";
 
 const MAX_HANDOFF_BYTES = 16_384;
 
-export interface ServerRuntimeProfile {
-  readonly schemaVersion: 1;
-  readonly host: DashboardHostKind;
-  readonly profile: {
-    readonly id: string;
-    readonly name: string;
-    readonly origin: string;
-    readonly authentication: "cookie" | "desktop_local";
-  };
-}
+const nonEmptyString = z.string().refine((value) => value.trim().length > 0);
+const runtimeProfileSchema = z
+  .object({
+    schema_version: z.literal(1),
+    host: z.enum(["local", "cloud", "selfhost"]),
+    profile: z.object({
+      id: nonEmptyString,
+      name: nonEmptyString,
+      origin: z.url().transform((value) => new URL(value).origin),
+      authentication: z.enum(["cookie", "desktop_local"]),
+    }),
+  })
+  .refine(({ host, profile }) => {
+    if (host === "local")
+      return profile.id === "local:this-mac" && profile.authentication === "desktop_local";
+    if (host === "cloud")
+      return profile.id === "cloud:selftune" && profile.authentication === "cookie";
+    return profile.id.startsWith("selfhost:") && profile.authentication === "cookie";
+  }, "This server profile identity does not match its host kind.")
+  .transform(({ schema_version, host, profile }) => ({
+    schemaVersion: schema_version,
+    host,
+    profile,
+  }));
+
+export type ServerRuntimeProfile = z.output<typeof runtimeProfileSchema>;
+export const decodeServerRuntimeProfile = runtimeProfileSchema.parse;
+
+const persistedFlag = z.boolean().optional().catch(undefined);
+const persistedProfileSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["cloud", "selfhost"]),
+  name: z.string(),
+  origin: z.string(),
+  capabilities: z
+    .object({
+      analytics: persistedFlag,
+      registry: persistedFlag,
+      signals: persistedFlag,
+      proposals: persistedFlag,
+      billing: persistedFlag,
+      teamAdmin: persistedFlag,
+      runtimeStatus: persistedFlag,
+    })
+    .catch({}),
+});
+const persistedProfilesSchema = z.array(persistedProfileSchema.nullable().catch(null));
+const handoffPath = z
+  .object({
+    handoff_path: z.string().startsWith("/api/auth/session/handoff?"),
+  })
+  .transform((response) => response.handoff_path).parse;
 
 export type BrowserServerProfileNavigation =
   | {
@@ -36,53 +79,12 @@ export type BrowserServerProfileNavigation =
       readonly navigate: (url: string) => void | Promise<void>;
     };
 
-function property(value: object, key: string): unknown {
-  return Reflect.get(value, key);
-}
-
-function requiredString(value: object, key: string): string {
-  const candidate = property(value, key);
-  if (typeof candidate !== "string" || candidate.trim().length === 0) {
-    throw new TypeError(`Server profile contract field ${key} must be a non-empty string.`);
-  }
-  return candidate;
-}
-
-export function decodeServerRuntimeProfile(value: unknown): ServerRuntimeProfile {
-  if (typeof value !== "object" || value === null || property(value, "schema_version") !== 1) {
-    throw new TypeError("This server does not expose the SelfTune profile contract.");
-  }
-  const host = property(value, "host");
-  if (host !== "local" && host !== "cloud" && host !== "selfhost") {
-    throw new TypeError("This server reports an unsupported dashboard host.");
-  }
-  const rawProfile = property(value, "profile");
-  if (typeof rawProfile !== "object" || rawProfile === null) {
-    throw new TypeError("This server profile contract is missing its profile.");
-  }
-  const id = requiredString(rawProfile, "id");
-  const name = requiredString(rawProfile, "name");
-  const origin = new URL(requiredString(rawProfile, "origin")).origin;
-  const authentication = property(rawProfile, "authentication");
-  if (authentication !== "cookie" && authentication !== "desktop_local") {
-    throw new TypeError("This server reports an unsupported authentication method.");
-  }
-  if (
-    (host === "local" && (id !== "local:this-mac" || authentication !== "desktop_local")) ||
-    (host === "cloud" && (id !== "cloud:selftune" || authentication !== "cookie")) ||
-    (host === "selfhost" && (!id.startsWith("selfhost:") || authentication !== "cookie"))
-  ) {
-    throw new TypeError("This server profile identity does not match its host kind.");
-  }
-  return {
-    schemaVersion: 1,
-    host,
-    profile: { id, name, origin, authentication },
-  };
-}
+export type BrowserProfileFetch = (
+  ...args: Parameters<typeof globalThis.fetch>
+) => ReturnType<typeof globalThis.fetch>;
 
 export async function fetchServerRuntimeProfile(
-  fetchImpl: typeof globalThis.fetch,
+  fetchImpl: BrowserProfileFetch,
   origin: string,
 ): Promise<ServerRuntimeProfile> {
   const response = await fetchImpl(new URL(SERVER_PROFILE_CONTRACT_PATH, origin), {
@@ -96,34 +98,19 @@ export async function fetchServerRuntimeProfile(
 }
 
 function parsePersistedProfiles(
-  value: unknown,
+  serialized: string,
   fallbackCapabilities: DashboardFeatureFlags,
 ): ServerProfile[] {
-  if (!Array.isArray(value)) return [];
+  const candidates = persistedProfilesSchema.parse(JSON.parse(serialized));
 
   const profiles: ServerProfile[] = [];
-  for (const candidate of value) {
-    if (typeof candidate !== "object" || candidate === null) continue;
-    const id = property(candidate, "id");
-    const kind = property(candidate, "kind");
-    const name = property(candidate, "name");
-    const origin = property(candidate, "origin");
-    if (
-      typeof id !== "string" ||
-      (kind !== "cloud" && kind !== "selfhost") ||
-      typeof name !== "string" ||
-      typeof origin !== "string"
-    ) {
-      continue;
-    }
-
-    const persistedCapabilities = property(candidate, "capabilities");
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const { id, kind, name, origin, capabilities: persistedCapabilities } = candidate;
     const capabilities = { ...fallbackCapabilities };
-    if (typeof persistedCapabilities === "object" && persistedCapabilities !== null) {
-      for (const key of FEATURE_KEYS) {
-        const flag = property(persistedCapabilities, key);
-        if (typeof flag === "boolean") capabilities[key] = flag;
-      }
+    for (const key of FEATURE_KEYS) {
+      const flag = persistedCapabilities[key];
+      if (flag !== undefined) capabilities[key] = flag;
     }
 
     try {
@@ -158,15 +145,13 @@ export function consumeServerProfilesHandoff(
   if (!handoff) return null;
   url.searchParams.delete(SERVER_PROFILES_HANDOFF_PARAM);
   if (new TextEncoder().encode(handoff).byteLength > MAX_HANDOFF_BYTES) return null;
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(handoff);
+    const profiles = parsePersistedProfiles(handoff, fallbackCapabilities);
+    if (profiles.length === 0) return null;
+    return { cleanUrl: url.toString(), serialized: serializeManagedServerProfiles(profiles) };
   } catch {
     return null;
   }
-  const profiles = parsePersistedProfiles(parsed, fallbackCapabilities);
-  if (profiles.length === 0) return null;
-  return { cleanUrl: url.toString(), serialized: serializeManagedServerProfiles(profiles) };
 }
 
 function statusForResponse(response: Response): ServerProfileStatus {
@@ -201,7 +186,7 @@ function incompatibleProfile(profile: ServerProfile, message: string): ServerPro
 function profileForCurrentRuntime(
   runtime: ServerRuntimeProfile | undefined,
   capabilities: DashboardFeatureFlags,
-): { readonly currentServer?: ServerProfile; readonly thisMac?: ServerProfile } {
+) {
   if (!runtime) return {};
   if (runtime.host === "local") {
     return {
@@ -223,17 +208,6 @@ function profileForCurrentRuntime(
   return {};
 }
 
-function handoffPath(response: unknown): string {
-  if (typeof response !== "object" || response === null) {
-    throw new TypeError("The Self-host session handoff response is invalid.");
-  }
-  const value = property(response, "handoff_path");
-  if (typeof value !== "string" || !value.startsWith("/api/auth/session/handoff?")) {
-    throw new TypeError("The Self-host session handoff response is invalid.");
-  }
-  return value;
-}
-
 export function createBrowserServerProfileController(options: {
   readonly origin: string;
   readonly capabilities: DashboardFeatureFlags;
@@ -243,12 +217,12 @@ export function createBrowserServerProfileController(options: {
   readonly clearHostState: () => void | Promise<void>;
   readonly currentPath?: () => string;
   readonly navigation: BrowserServerProfileNavigation;
-  readonly fetch: typeof globalThis.fetch;
+  readonly fetch: BrowserProfileFetch;
 }) {
   const credentials = new Map<string, string>();
-  let persisted: unknown = [];
+  let persisted: ServerProfile[] = [];
   try {
-    persisted = JSON.parse(options.load() ?? "[]");
+    persisted = parsePersistedProfiles(options.load() ?? "[]", options.capabilities);
   } catch {
     persisted = [];
   }
@@ -270,7 +244,7 @@ export function createBrowserServerProfileController(options: {
   });
   const requiredProfiles = [cloud, ...(currentServer ? [currentServer] : [])];
   const initial = normalizeServerProfiles(
-    [...parsePersistedProfiles(persisted, options.capabilities), ...requiredProfiles].filter(
+    [...persisted, ...requiredProfiles].filter(
       (profile, index, profiles) =>
         profiles.findIndex((candidate) => candidate.id === profile.id) === index,
     ),
@@ -358,26 +332,18 @@ export function createBrowserServerProfileController(options: {
   return {
     ...controller,
     reconcileExternal(serialized: string): void {
-      let parsed: unknown;
+      let profiles: ServerProfile[];
       try {
-        parsed = JSON.parse(serialized);
+        profiles = parsePersistedProfiles(serialized, options.capabilities);
       } catch {
-        controller.reconcileExternal(serialized);
         return;
       }
-      if (!Array.isArray(parsed)) {
-        controller.reconcileExternal(serialized);
-        return;
-      }
-      const ids = new Set(
-        parsed.flatMap((candidate) => {
-          if (typeof candidate !== "object" || candidate === null) return [];
-          const id = property(candidate, "id");
-          return typeof id === "string" ? [id] : [];
-        }),
-      );
+      const ids = new Set(profiles.map((profile) => profile.id));
       controller.reconcileExternal(
-        JSON.stringify([...parsed, ...requiredProfiles.filter((profile) => !ids.has(profile.id))]),
+        JSON.stringify([
+          ...profiles,
+          ...requiredProfiles.filter((profile) => !ids.has(profile.id)),
+        ]),
       );
     },
   };

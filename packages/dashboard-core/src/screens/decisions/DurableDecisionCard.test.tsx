@@ -5,15 +5,15 @@ import { DurableDecisionCard } from "./DurableDecisionCard";
 
 const common = {
   id: "decision-1",
-  status: "pending",
+  status: "pending" as const,
   createdAt: "2026-07-16T10:00:00.000Z",
   updatedAt: "2026-07-16T10:00:00.000Z",
   expiresAt: "2026-07-17T10:00:00.000Z",
   decidedAt: null,
   failure: null,
-  audit: [{ event: "prepared", at: "2026-07-16T10:00:00.000Z", reason: null }],
+  audit: [{ event: "prepared" as const, at: "2026-07-16T10:00:00.000Z", reason: null }],
   hasRecoveryReceipt: false,
-} as const;
+};
 
 describe("shared durable decision UI", () => {
   it("renders common lifecycle and typed impact presenters for all consumers", () => {

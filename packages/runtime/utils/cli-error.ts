@@ -57,22 +57,13 @@ export class CLIError extends Error {
   }
 
   /** Structured JSON representation for `--json` mode. */
-  toJSON(): {
-    error: {
-      code: CLIErrorCode;
-      message: string;
-      suggestion?: string;
-      retryable: boolean;
+  toJSON() {
+    const error = {
+      code: this.code,
+      message: this.message,
+      retryable: this.retryable,
     };
-  } {
-    return {
-      error: {
-        code: this.code,
-        message: this.message,
-        ...(this.suggestion ? { suggestion: this.suggestion } : {}),
-        retryable: this.retryable,
-      },
-    };
+    return { error: this.suggestion ? { ...error, suggestion: this.suggestion } : error };
   }
 }
 
@@ -89,22 +80,22 @@ export function isJsonOutputMode(): boolean {
   return process.argv.includes("--json") || process.stdout?.isTTY === false;
 }
 
-export function handleCLIError(error: unknown): never {
+export function handleCLIError(cause: unknown): never {
   const jsonMode = isJsonOutputMode();
 
-  if (error instanceof CLIError || error instanceof LibraryError) {
+  if (cause instanceof CLIError || cause instanceof LibraryError) {
     if (jsonMode) {
-      console.error(JSON.stringify(error.toJSON()));
-      process.exit(error.exitCode);
+      console.error(JSON.stringify(cause.toJSON()));
+      process.exit(cause.exitCode);
     }
-    console.error(`[ERROR] ${error.message}`);
-    if (error.suggestion) {
-      console.error(`  → ${error.suggestion}`);
+    console.error(`[ERROR] ${cause.message}`);
+    if (cause.suggestion) {
+      console.error(`  → ${cause.suggestion}`);
     }
-    process.exit(error.exitCode);
+    process.exit(cause.exitCode);
   }
 
-  const message = error instanceof Error ? error.message : String(error);
+  const message = cause instanceof Error ? cause.message : String(cause);
   if (jsonMode) {
     console.error(JSON.stringify({ error: { code: "INTERNAL_ERROR", message, retryable: false } }));
     process.exit(1);

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { RECOVER_HELP } from "../../apps/cli/src/effect-cli/commands/recover.js";
+import type { RecoverSummary } from "../../packages/runtime/recover.js";
 
 const CLI_ENTRYPOINT = fileURLToPath(new URL("../../apps/cli/src/main.ts", import.meta.url));
 const temporaryHomes: string[] = [];
@@ -15,13 +16,23 @@ interface CliResult {
   stderr: string;
 }
 
-interface RecoverSummary {
-  mode: "incremental" | "full";
-  source: "legacy_jsonl_or_export_snapshot";
-  since: string | null;
-  force: boolean;
-  result: Record<string, number>;
-}
+const EMPTY_RECOVERY = {
+  mode: "incremental",
+  source: "legacy_jsonl_or_export_snapshot",
+  since: null,
+  force: false,
+  result: {
+    sessions: 0,
+    prompts: 0,
+    skillInvocations: 0,
+    executionFacts: 0,
+    sessionTelemetry: 0,
+    skillUsage: 0,
+    evolutionAudit: 0,
+    evolutionEvidence: 0,
+    orchestrateRuns: 0,
+  },
+} satisfies RecoverSummary;
 
 function makeHome(): string {
   const home = mkdtempSync(join(tmpdir(), "selftune-recover-effect-cli-"));
@@ -51,9 +62,9 @@ function runRecover(home: string, ...args: string[]): CliResult {
   };
 }
 
-function parseSummary(result: CliResult): RecoverSummary {
+function expectSummary(result: CliResult, expected: RecoverSummary): void {
   expect(result.exitCode, result.stderr).toBe(0);
-  return JSON.parse(result.stdout) as RecoverSummary;
+  expect(JSON.parse(result.stdout)).toEqual(expected);
 }
 
 function expectNoRecoveryMutation(home: string): void {
@@ -71,29 +82,23 @@ afterEach(() => {
 describe("recover Effect CLI compatibility", () => {
   test("defaults to incremental recovery over isolated paths", () => {
     const home = makeHome();
-    const summary = parseSummary(runRecover(home, "--json"));
-    expect(summary).toMatchObject({
-      mode: "incremental",
-      source: "legacy_jsonl_or_export_snapshot",
-      since: null,
-      force: false,
-    });
-    expect(Object.values(summary.result).every((count) => count === 0)).toBe(true);
+    expectSummary(runRecover(home, "--json"), EMPTY_RECOVERY);
     expect(existsSync(join(home, ".selftune"))).toBe(true);
   });
 
   test("full recovery preserves full and force options", () => {
     const home = makeHome();
-    const summary = parseSummary(runRecover(home, "--full", "--force", "--json"));
-    expect(summary.mode).toBe("full");
-    expect(summary.force).toBe(true);
-    expect(summary.since).toBeNull();
+    expectSummary(runRecover(home, "--full", "--force", "--json"), {
+      ...EMPTY_RECOVERY,
+      mode: "full",
+      force: true,
+    });
   });
 
   test("accepts since and every source-path option together", () => {
     const home = makeHome();
     const sources = join(home, "sources");
-    const summary = parseSummary(
+    expectSummary(
       runRecover(
         home,
         "--force",
@@ -111,12 +116,8 @@ describe("recover Effect CLI compatibility", () => {
         "--orchestrate-run-log",
         join(sources, "orchestrate-runs.jsonl"),
       ),
+      { ...EMPTY_RECOVERY, force: true, since: "2026-01-02T00:00:00.000Z" },
     );
-    expect(summary).toMatchObject({
-      mode: "incremental",
-      force: true,
-      since: "2026-01-02T00:00:00.000Z",
-    });
   });
 
   test("help documents every option without opening recovery state", () => {

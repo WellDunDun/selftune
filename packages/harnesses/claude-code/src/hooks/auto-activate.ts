@@ -11,6 +11,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import * as Schema from "effect/Schema";
 
 import {
   CLAUDE_SETTINGS_PATH,
@@ -20,12 +21,13 @@ import {
   sessionStatePath,
   TELEMETRY_LOG,
 } from "@selftune/runtime/constants";
-import type {
-  ActivationContext,
-  ActivationRule,
-  PromptSubmitPayload,
+import {
+  CommonHookPayload,
+  type ActivationContext,
+  type ActivationRule,
   SessionState,
 } from "@selftune/runtime/types";
+import { ClaudeCodeSettings } from "@selftune/runtime/utils/hooks";
 
 import {
   SILENT_HOOK_SUCCESS,
@@ -43,8 +45,10 @@ export function loadSessionState(path: string, sessionId: string): SessionState 
   }
 
   try {
-    const data = JSON.parse(readFileSync(path, "utf-8")) as SessionState;
-    if (data.session_id === sessionId && Array.isArray(data.suggestions_shown)) {
+    const data = Schema.decodeUnknownSync(Schema.fromJsonString(SessionState))(
+      readFileSync(path, "utf-8"),
+    );
+    if (data.session_id === sessionId) {
       return data;
     }
   } catch {
@@ -74,30 +78,23 @@ export function checkPaiCoexistence(settingsPath: string): boolean {
   if (!existsSync(settingsPath)) return false;
 
   try {
-    const settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as {
-      hooks?: Record<string, Array<{ command?: string; hooks?: Array<{ command?: string }> }>>;
-    };
+    const settings = Schema.decodeUnknownSync(Schema.fromJsonString(ClaudeCodeSettings))(
+      readFileSync(settingsPath, "utf-8"),
+    );
 
     if (!settings.hooks) return false;
 
     // Search all hook entries for skill-activation-prompt
     for (const hookEntries of Object.values(settings.hooks)) {
-      if (!Array.isArray(hookEntries)) continue;
       for (const entry of hookEntries) {
         // Check flat entry.command
-        if (
-          typeof entry.command === "string" &&
-          entry.command.includes("skill-activation-prompt")
-        ) {
+        if (entry.command !== undefined && entry.command.includes("skill-activation-prompt")) {
           return true;
         }
         // Check nested entry.hooks[].command
-        if (entry.hooks && Array.isArray(entry.hooks)) {
+        if (entry.hooks) {
           for (const hook of entry.hooks) {
-            if (
-              typeof hook.command === "string" &&
-              hook.command.includes("skill-activation-prompt")
-            ) {
+            if (hook.command !== undefined && hook.command.includes("skill-activation-prompt")) {
               return true;
             }
           }
@@ -186,7 +183,7 @@ export async function processAutoActivate(
 
 export async function runAutoActivateHook(rawStdin: string): Promise<HookExecutionResult> {
   try {
-    const payload: PromptSubmitPayload = JSON.parse(rawStdin);
+    const payload = Schema.decodeUnknownSync(Schema.fromJsonString(CommonHookPayload))(rawStdin);
     const sessionId = payload.session_id ?? "unknown";
     const suggestions = await processAutoActivate(sessionId, CLAUDE_SETTINGS_PATH);
 

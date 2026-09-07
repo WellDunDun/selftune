@@ -93,10 +93,7 @@ export interface AttachedServerTargetOptions {
   mutationContract?: "local-v2";
 }
 
-function resolveRequestHeaders(
-  options: AttachedServerTargetOptions,
-  dashboardUrl: string | null,
-): { headers: Record<string, string> | undefined; error: unknown | null } {
+function resolveRequestHeaders(options: AttachedServerTargetOptions, dashboardUrl: string | null) {
   const headers: Record<string, string> = {};
   if (options.token) headers.Authorization = `Bearer ${options.token}`;
   if (!options.storageState || !dashboardUrl || !existsSync(options.storageState)) {

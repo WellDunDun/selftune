@@ -6,7 +6,7 @@ import type {
   ProjectSkillSetReleaseReceiptModel,
 } from "@selftune/dashboard-core/models";
 
-import { portfolioRequest } from "./api";
+import { portfolioRequest } from "./dashboard-http";
 
 interface LocalSkillSetPublishPreviewResponse {
   skillSetId: string;
@@ -38,7 +38,7 @@ export async function previewProjectSkillSetPublish(
 ): Promise<ProjectSkillSetPublishPreviewModel> {
   const response = await portfolioRequest<LocalSkillSetPublishPreviewResponse>(
     "/api/v2/skill-sets/publish/preview",
-    { set_id: input.skillSetId, dependency_resolution: input.dependencyResolution },
+    JSON.stringify({ set_id: input.skillSetId, dependency_resolution: input.dependencyResolution }),
   );
   return {
     skillSetId: response.skillSetId,
@@ -61,14 +61,14 @@ export async function publishProjectSkillSet(
 ): Promise<ProjectSkillSetReleaseReceiptModel> {
   const response = await portfolioRequest<LocalSkillSetReleaseResponse>(
     "/api/v2/skill-sets/publish",
-    {
+    JSON.stringify({
       set_id: input.skillSetId,
       expected_skill_set_revision_sha256: input.expectedSkillSetRevisionSha256,
       expected_envelope_sha256: input.expectedEnvelopeSha256,
       dependency_resolution: input.dependencyResolution,
       expected_dependency_lock: input.expectedDependencyLock,
       confirm_publish: input.confirmPublish,
-    },
+    }),
   );
   return {
     releaseId: response.release_id,

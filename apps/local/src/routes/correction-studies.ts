@@ -1,4 +1,13 @@
 import { dashboardCorsHeaders, sameOriginFailure } from "../dashboard-http.js";
+import { Option, Schema } from "effect";
+import { CorrectionReviewRequest } from "../correction-review-request.js";
+import type { recordLocalCorrectionReviewDecision } from "../correction-review-service.js";
+import {
+  ExplicitCorrectionStudyRequest,
+  type CorrectionStudyServiceResponse,
+} from "../correction-study-service.js";
+import type { listCorrectionReviews } from "../correction-review-projection.js";
+import type { CorrectionSignalPage } from "@selftune/runtime/correction-study/signal-discovery";
 
 const MAX_CORRECTION_STUDY_REQUEST_BYTES = 8 * 1024;
 const correctionEpisodeIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
@@ -32,21 +41,27 @@ export interface CorrectionStudyRouteOptions {
    * Captures one explicit correction episode. The domain owns idempotency;
    * transport deliberately forwards the decoded payload unchanged.
    */
-  readonly captureExplicitCorrection: (input: unknown) => Promise<unknown>;
-  readonly lookup: (episodeId: string) => Promise<unknown>;
+  readonly captureExplicitCorrection: (
+    input: ExplicitCorrectionStudyRequest,
+  ) => Promise<CorrectionStudyServiceResponse>;
+  readonly lookup: (episodeId: string) => Promise<CorrectionStudyServiceResponse>;
   readonly discoverSignals?: (input: {
     readonly limit: number;
     readonly cursor: string | null;
-  }) => Promise<unknown>;
-  readonly recordReviewDecision?: (input: unknown) => Promise<unknown>;
-  readonly listReviews?: (limit: number) => Promise<unknown>;
+  }) => Promise<CorrectionSignalPage>;
+  readonly recordReviewDecision?: (
+    input: CorrectionReviewRequest,
+  ) => Promise<ReturnType<typeof recordLocalCorrectionReviewDecision>>;
+  readonly listReviews?: (
+    limit: number,
+  ) => Promise<{ readonly items: ReturnType<typeof listCorrectionReviews> }>;
 }
 
 function errorResponse(status: number, code: string, message: string): Response {
   return Response.json({ error: { code, message } }, { status, headers: dashboardCorsHeaders() });
 }
 
-async function boundedJson(request: Request): Promise<unknown> {
+async function boundedText(request: Request): Promise<string> {
   const declaredLength = Number.parseInt(request.headers.get("content-length") ?? "", 10);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_CORRECTION_STUDY_REQUEST_BYTES) {
     throw new RangeError("too large");
@@ -69,18 +84,18 @@ async function boundedJson(request: Request): Promise<unknown> {
     }
     body += decoder.decode(chunk.value, { stream: true });
   }
-  return JSON.parse(body + decoder.decode());
+  return body + decoder.decode();
 }
 
 function serviceErrorResponse(
-  error: unknown,
+  cause: unknown,
   fallbackStatus: number,
   fallbackCode: string,
   fallbackMessage: string,
 ): Response {
-  if (error instanceof CorrectionStudyServiceError) {
-    const status = error.status >= 400 && error.status <= 599 ? error.status : 409;
-    return errorResponse(status, error.code, error.message);
+  if (cause instanceof CorrectionStudyServiceError) {
+    const status = cause.status >= 400 && cause.status <= 599 ? cause.status : 409;
+    return errorResponse(status, cause.code, cause.message);
   }
   return errorResponse(fallbackStatus, fallbackCode, fallbackMessage);
 }
@@ -152,15 +167,30 @@ export function createCorrectionStudyRoutes(
           if (unauthorized) return unauthorized;
         }
         const input = signalQuery(url);
-        if (!input || !options.listReviews)
+        if (!input)
+          return errorResponse(
+            400,
+            "INVALID_CORRECTION_REVIEW_QUERY",
+            "Review listing requires a limit from 1 to 128 and a bounded cursor.",
+          );
+        if (!options.listReviews)
           return errorResponse(
             503,
             "CORRECTION_REVIEW_UNAVAILABLE",
             "Correction review is unavailable.",
           );
-        return Response.json(await options.listReviews(input.limit), {
-          headers: dashboardCorsHeaders(),
-        });
+        try {
+          return Response.json(await options.listReviews(input.limit), {
+            headers: dashboardCorsHeaders(),
+          });
+        } catch (cause) {
+          return serviceErrorResponse(
+            cause,
+            503,
+            "CORRECTION_REVIEW_UNAVAILABLE",
+            "Correction review is unavailable.",
+          );
+        }
       }
 
       if (
@@ -177,7 +207,16 @@ export function createCorrectionStudyRoutes(
           );
         }
         try {
-          return Response.json(await options.recordReviewDecision(await boundedJson(request)), {
+          const payload: unknown = JSON.parse(await boundedText(request));
+          const input = Schema.decodeUnknownOption(CorrectionReviewRequest)(payload);
+          if (Option.isNone(input)) {
+            return errorResponse(
+              400,
+              "INVALID_CORRECTION_REVIEW",
+              "A review must name a candidate, action, reason, and immutable manifest.",
+            );
+          }
+          return Response.json(await options.recordReviewDecision(input.value), {
             headers: dashboardCorsHeaders(),
           });
         } catch (error) {
@@ -211,8 +250,16 @@ export function createCorrectionStudyRoutes(
         const unauthorized = sameOriginFailure(request, allowedOrigins);
         if (unauthorized) return unauthorized;
         try {
-          const input = await boundedJson(request);
-          return Response.json(await options.captureExplicitCorrection(input), {
+          const payload: unknown = JSON.parse(await boundedText(request));
+          const input = Schema.decodeUnknownOption(ExplicitCorrectionStudyRequest)(payload);
+          if (Option.isNone(input)) {
+            return errorResponse(
+              400,
+              "INVALID_CORRECTION_STUDY_REQUEST",
+              "The explicit correction payload must match the correction study contract.",
+            );
+          }
+          return Response.json(await options.captureExplicitCorrection(input.value), {
             status: 200,
             headers: dashboardCorsHeaders(),
           });

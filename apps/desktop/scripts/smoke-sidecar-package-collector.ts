@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
+import * as Schema from "effect/Schema";
 
 import { INTERNAL_PACKAGE_BUNDLE_SMOKE_COMMAND } from "@selftune/runtime/remote-library/package-bundle-collector-command";
 
@@ -38,16 +39,13 @@ try {
     },
   );
   if (stderr.trim()) throw new Error(`Compiled collector wrote to stderr: ${stderr.trim()}`);
-  const decoded: unknown = JSON.parse(stdout);
-  if (
-    decoded === null ||
-    typeof decoded !== "object" ||
-    !("encoded_bytes" in decoded) ||
-    typeof decoded.encoded_bytes !== "number" ||
-    decoded.encoded_bytes <= 0
-  ) {
-    throw new Error(`Compiled collector returned an invalid proof: ${stdout}`);
-  }
+  const decoded = Schema.decodeUnknownSync(
+    Schema.fromJsonString(
+      Schema.Struct({
+        encoded_bytes: Schema.Number.check(Schema.isGreaterThan(0)),
+      }),
+    ),
+  )(stdout);
   process.stdout.write(
     `Compiled Desktop Sync & Backup collector smoke passed (${decoded.encoded_bytes} encoded bytes).\n`,
   );

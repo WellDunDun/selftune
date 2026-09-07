@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import * as Schema from "effect/Schema";
 
 import { parseDeveloperIdSigningIdentity } from "./runtime-integrity";
 
@@ -98,23 +99,23 @@ export function compiledDesktopReleaseTrustPins(
 ): DesktopReleaseTrustPins | null {
   return desktopReleaseTrustPinsFromEnvironment(platform, {
     DESKTOP_MACOS_TEAM_IDENTIFIER:
-      typeof __SELFTUNE_DESKTOP_MACOS_TEAM_IDENTIFIER__ === "string"
+      typeof __SELFTUNE_DESKTOP_MACOS_TEAM_IDENTIFIER__ !== "undefined"
         ? __SELFTUNE_DESKTOP_MACOS_TEAM_IDENTIFIER__
         : "",
     DESKTOP_MACOS_CERTIFICATE_AUTHORITY:
-      typeof __SELFTUNE_DESKTOP_MACOS_CERTIFICATE_AUTHORITY__ === "string"
+      typeof __SELFTUNE_DESKTOP_MACOS_CERTIFICATE_AUTHORITY__ !== "undefined"
         ? __SELFTUNE_DESKTOP_MACOS_CERTIFICATE_AUTHORITY__
         : "",
     DESKTOP_MACOS_DESIGNATED_REQUIREMENT_SHA256:
-      typeof __SELFTUNE_DESKTOP_MACOS_DESIGNATED_REQUIREMENT_SHA256__ === "string"
+      typeof __SELFTUNE_DESKTOP_MACOS_DESIGNATED_REQUIREMENT_SHA256__ !== "undefined"
         ? __SELFTUNE_DESKTOP_MACOS_DESIGNATED_REQUIREMENT_SHA256__
         : "",
     DESKTOP_WINDOWS_PUBLISHER_SUBJECT:
-      typeof __SELFTUNE_DESKTOP_WINDOWS_PUBLISHER_SUBJECT__ === "string"
+      typeof __SELFTUNE_DESKTOP_WINDOWS_PUBLISHER_SUBJECT__ !== "undefined"
         ? __SELFTUNE_DESKTOP_WINDOWS_PUBLISHER_SUBJECT__
         : "",
     DESKTOP_WINDOWS_CERTIFICATE_THUMBPRINT:
-      typeof __SELFTUNE_DESKTOP_WINDOWS_CERTIFICATE_THUMBPRINT__ === "string"
+      typeof __SELFTUNE_DESKTOP_WINDOWS_CERTIFICATE_THUMBPRINT__ !== "undefined"
         ? __SELFTUNE_DESKTOP_WINDOWS_CERTIFICATE_THUMBPRINT__
         : "",
   });
@@ -222,14 +223,18 @@ function windowsSignatureIsTrusted(
   ]);
   if (result.status !== 0) return false;
   try {
-    const value: unknown = JSON.parse(result.stdout);
-    if (typeof value !== "object" || value === null) return false;
-    if (!("Status" in value) || value.Status !== "Valid") return false;
-    if (!("Subject" in value) || value.Subject !== pins.publisherSubject) return false;
+    const signature = Schema.decodeUnknownSync(
+      Schema.fromJsonString(
+        Schema.Struct({
+          Status: Schema.Literal("Valid"),
+          Subject: Schema.String,
+          Thumbprint: Schema.String,
+        }),
+      ),
+    )(result.stdout);
     return (
-      "Thumbprint" in value &&
-      typeof value.Thumbprint === "string" &&
-      value.Thumbprint.toUpperCase() === pins.certificateThumbprint
+      signature.Subject === pins.publisherSubject &&
+      signature.Thumbprint.toUpperCase() === pins.certificateThumbprint
     );
   } catch {
     return false;

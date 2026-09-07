@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { formatWithOptions } from "node:util";
+import { isFunction } from "effect/Predicate";
 import {
   appendDashboardActionEvent,
   setCurrentDashboardActionContext,
@@ -170,10 +172,26 @@ function detectDashboardAction(argv: string[]): {
   return null;
 }
 
-function normalizeChunk(chunk: unknown): string {
-  if (typeof chunk === "string") return chunk;
-  if (Buffer.isBuffer(chunk)) return chunk.toString("utf-8");
-  return String(chunk);
+function normalizeChunk(chunk: string | Uint8Array): string {
+  return chunk instanceof Uint8Array ? Buffer.from(chunk).toString("utf-8") : chunk;
+}
+
+type WriteCallback = Parameters<typeof process.stdout.write>[2];
+
+function mirrorWrite(
+  write: typeof process.stdout.write,
+  capture: (chunk: string) => void,
+): typeof process.stdout.write {
+  return (
+    chunk: string | Uint8Array,
+    encodingOrCallback?: BufferEncoding | WriteCallback,
+    callback?: WriteCallback,
+  ) => {
+    capture(normalizeChunk(chunk));
+    if (isFunction(encodingOrCallback)) return write(chunk, encodingOrCallback);
+    if (encodingOrCallback === undefined) return write(chunk, callback);
+    return write(chunk, encodingOrCallback, callback);
+  };
 }
 
 export interface DashboardActionStreamSession {
@@ -217,9 +235,9 @@ export function startDashboardActionStream(argv: string[]): DashboardActionStrea
     skillPath,
   });
 
-  process.stdout.write = ((chunk: unknown, ...args: unknown[]) => {
+  process.stdout.write = mirrorWrite(originalStdoutWrite, (chunk) => {
     if (!suppressChunkCapture) {
-      stdoutBuffer += normalizeChunk(chunk);
+      stdoutBuffer += chunk;
       appendDashboardActionEvent({
         event_id: eventId,
         action,
@@ -227,14 +245,12 @@ export function startDashboardActionStream(argv: string[]): DashboardActionStrea
         skill_name: skillName,
         skill_path: skillPath,
         ts: Date.now(),
-        chunk: normalizeChunk(chunk),
+        chunk,
       });
     }
-    return originalStdoutWrite(chunk as never, ...(args as []));
-  }) as typeof process.stdout.write;
+  });
 
-  process.stderr.write = ((chunk: unknown, ...args: unknown[]) => {
-    const normalized = normalizeChunk(chunk);
+  process.stderr.write = mirrorWrite(originalStderrWrite, (normalized) => {
     if (!suppressChunkCapture) {
       stderrBuffer += normalized;
       if (normalized.trim()) {
@@ -250,17 +266,14 @@ export function startDashboardActionStream(argv: string[]): DashboardActionStrea
         chunk: normalized,
       });
     }
-    return originalStderrWrite(chunk as never, ...(args as []));
-  }) as typeof process.stderr.write;
+  });
 
   function wrapConsole(
     stage: "stdout" | "stderr",
     originalMethod: typeof console.log,
   ): typeof console.log {
-    return (...args: unknown[]) => {
-      const message = args
-        .map((arg) => (typeof arg === "string" ? arg : Bun.inspect(arg)))
-        .join(" ");
+    return (...args: Parameters<typeof console.log>) => {
+      const message = formatWithOptions({ colors: false }, ...args);
       if (message.trim()) {
         if (stage === "stderr") {
           stderrBuffer += `${message}\n`;

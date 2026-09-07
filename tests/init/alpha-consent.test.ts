@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { installFetchSpy } from "../helpers/fetch-spy.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeConfigSync } from "@selftune/config";
+import { loadConfigSync, writeConfigSync } from "@selftune/config";
 
 import {
   ALPHA_CONSENT_NOTICE,
@@ -10,13 +11,12 @@ import {
   readAlphaIdentity,
   writeAlphaIdentity,
 } from "../../packages/runtime/alpha-identity.js";
-import { runInit } from "../../packages/orchestration/src/init.js";
+import { runInit, type InitOptions } from "../../packages/orchestration/src/init.js";
 import { resolveCloudCredential } from "../../packages/runtime/auth/cloud-credential.js";
 import type { PlatformCredentialStore } from "../../packages/runtime/credential-store.js";
-import type { AlphaIdentity, SelftuneConfig } from "../../packages/runtime/types.js";
+import type { AlphaIdentity } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
-const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
 let credentials: Map<string, string>;
 let credentialStore: PlatformCredentialStore;
@@ -30,8 +30,8 @@ function mockDeviceCodeFlow(
 ): void {
   process.env.SELFTUNE_ALPHA_ENDPOINT = "https://test.local/api/v1/push";
   process.env.SELFTUNE_NO_BROWSER = "1";
-  globalThis.fetch = (async (url: string) => {
-    if (typeof url === "string" && url.endsWith("/device-code/poll")) {
+  installFetchSpy(async (url) => {
+    if (String(url) === "https://test.local/api/v1/device-code/poll") {
       return new Response(
         JSON.stringify({
           status: "approved",
@@ -43,6 +43,9 @@ function mockDeviceCodeFlow(
         { status: 200 },
       );
     }
+    if (String(url) !== "https://test.local/api/v1/device-code") {
+      throw new Error(`Unexpected request: ${url}`);
+    }
     return new Response(
       JSON.stringify({
         device_code: "dc_test",
@@ -53,10 +56,13 @@ function mockDeviceCodeFlow(
       }),
       { status: 200 },
     );
-  }) as unknown as typeof globalThis.fetch;
+  });
 }
 
 beforeEach(() => {
+  installFetchSpy(async () => {
+    throw new Error("Unexpected network request");
+  });
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-alpha-"));
   credentials = new Map();
   credentialStore = {
@@ -73,7 +79,7 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
-  globalThis.fetch = originalFetch;
+  mock.restore();
   process.env = { ...originalEnv };
 });
 
@@ -153,8 +159,7 @@ describe("writeAlphaIdentity", () => {
 
     writeAlphaIdentity(configPath, identity, { credentialStore });
 
-    const raw = JSON.parse(readFileSync(configPath, "utf-8"));
-    expect(raw.alpha).toEqual(identity);
+    expect(loadConfigSync(configPath)?.alpha).toEqual(identity);
   });
 
   test("throws when config contains malformed JSON", () => {
@@ -188,10 +193,10 @@ describe("writeAlphaIdentity", () => {
     });
     writeAlphaIdentity(configPath, identity, { credentialStore });
 
-    const raw = JSON.parse(readFileSync(configPath, "utf-8"));
-    expect(raw.agent_type).toBe("claude_code");
-    expect(raw.cli_path).toBe("/test");
-    expect(raw.alpha.user_id).toBe("merged-uuid");
+    const config = loadConfigSync(configPath);
+    expect(config?.agent_type).toBe("claude_code");
+    expect(config?.cli_path).toBe("/test");
+    expect(config?.alpha?.user_id).toBe("merged-uuid");
   });
 });
 
@@ -210,7 +215,7 @@ describe("ALPHA_CONSENT_NOTICE", () => {
 // ---------------------------------------------------------------------------
 
 describe("runInit with alpha", () => {
-  function makeInitOpts(overrides: Record<string, unknown> = {}) {
+  function makeInitOpts(overrides: Partial<InitOptions> = {}): InitOptions {
     const configDir = join(tmpDir, ".selftune");
     const configPath = join(configDir, "config.json");
     return {
@@ -356,19 +361,19 @@ describe("runInit with alpha", () => {
     await runInit(opts);
 
     // Read back from disk
-    const raw = JSON.parse(readFileSync(opts.configPath, "utf-8")) as SelftuneConfig;
-    expect(raw.alpha).toBeDefined();
-    expect(raw.alpha?.enrolled).toBe(true);
-    expect(raw.alpha?.email).toBe("roundtrip@example.com");
-    expect(raw.alpha?.display_name).toBe("Round Trip");
-    expect(raw.alpha?.user_id).toMatch(
+    const raw = loadConfigSync(opts.configPath);
+    expect(raw?.alpha).toBeDefined();
+    expect(raw?.alpha?.enrolled).toBe(true);
+    expect(raw?.alpha?.email).toBe("roundtrip@example.com");
+    expect(raw?.alpha?.display_name).toBe("Round Trip");
+    expect(raw?.alpha?.user_id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
 
     // Read via the identity module
     const identity = readAlphaIdentity(opts.configPath);
     expect(identity).not.toBeNull();
-    expect(identity?.user_id).toBe(raw.alpha?.user_id);
+    expect(identity?.user_id).toBe(raw?.alpha?.user_id);
   });
 
   test("fails before persisting an invalid device-code credential", async () => {
@@ -389,8 +394,11 @@ describe("runInit with alpha", () => {
       alphaEmail: "user@example.com",
     });
 
-    await expect(runInit(opts)).rejects.toThrow("did not include a cloud user id");
+    await expect(runInit(opts)).rejects.toThrow(
+      "Device code approval returned invalid credentials.",
+    );
     expect(readAlphaIdentity(opts.configPath)).toBeNull();
+    expect(credentials.size).toBe(0);
   });
 });
 

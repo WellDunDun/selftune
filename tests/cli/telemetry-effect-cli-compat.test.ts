@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as Schema from "effect/Schema";
 
 import { LEGACY_COMMAND_GROUPS } from "../../apps/cli/src/commands/router.js";
 import { isEffectCliInvocation } from "../../apps/cli/src/effect-cli/selection.js";
@@ -30,6 +31,7 @@ function runTelemetry(home: string, ...args: string[]): CliResult {
       SELFTUNE_CONFIG_DIR: join(home, ".selftune"),
       CI: "",
       SELFTUNE_NO_ANALYTICS: "",
+      SELFTUNE_ANALYTICS_ENDPOINT: "data:application/json,%7B%7D",
       SELFTUNE_SKIP_UPDATE_CHECK: "1",
     },
     stdout: "pipe",
@@ -43,10 +45,13 @@ function runTelemetry(home: string, ...args: string[]): CliResult {
 }
 
 function readAnalyticsDisabled(home: string): boolean {
-  const config = JSON.parse(readFileSync(join(home, ".selftune", "config.json"), "utf8")) as Record<
-    string,
-    unknown
-  >;
+  const config = Schema.decodeUnknownSync(
+    Schema.fromJsonString(
+      Schema.Struct({
+        analytics_disabled: Schema.optionalKey(Schema.Boolean),
+      }),
+    ),
+  )(readFileSync(join(home, ".selftune", "config.json"), "utf8"));
   return config.analytics_disabled === true;
 }
 
@@ -83,8 +88,7 @@ describe("telemetry Effect CLI compatibility", () => {
     }
     const configPath = join(home, ".selftune", "config.json");
     if (existsSync(configPath)) {
-      const config = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
-      expect(config.analytics_disabled).toBeUndefined();
+      expect(JSON.parse(readFileSync(configPath, "utf8"))).not.toHaveProperty("analytics_disabled");
     }
   });
 

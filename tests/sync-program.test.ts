@@ -2,10 +2,15 @@ import { describe, expect, test } from "bun:test";
 
 import { Effect, Layer, Result } from "effect";
 
-import type { SyncOptions, SyncProgramInput, SyncResult } from "@selftune/orchestration/sync/model";
+import type {
+  SyncAuditSuccess,
+  SyncAuditError,
+  SyncOptions,
+  SyncProgramInput,
+  SyncResult,
+} from "@selftune/orchestration/sync/model";
 import { runSyncProgram } from "@selftune/orchestration/sync/programs";
 import {
-  SyncAlphaUpload,
   SyncAudit,
   SyncCore,
   SyncInternalFailure,
@@ -93,11 +98,11 @@ function progressLayer(events: string[]) {
 }
 
 describe("runSyncProgram", () => {
-  test("orders core, success audit, and alpha while preserving output and preferences", async () => {
+  test("orders local core and audit without an upload dependency", async () => {
     const events: string[] = [];
     const optionsSeen: SyncOptions[] = [];
-    const successAudits: unknown[] = [];
-    const errorAudits: unknown[] = [];
+    const successAudits: SyncAuditSuccess[] = [];
+    const errorAudits: SyncAuditError[] = [];
     const layer = Layer.mergeAll(
       progressLayer(events),
       preferencesLayer(events),
@@ -122,12 +127,6 @@ describe("runSyncProgram", () => {
           return Effect.void;
         },
       }),
-      Layer.succeed(SyncAlphaUpload, {
-        run: () => {
-          events.push("alpha");
-          return Effect.succeed({ enrolled: true, prepared: 2, sent: 1, failed: 1, skipped: 0 });
-        },
-      }),
     );
 
     const result = await Effect.runPromise(runSyncProgram(input).pipe(Effect.provide(layer)));
@@ -139,7 +138,6 @@ describe("runSyncProgram", () => {
       "progress:  starting sync...",
       "progress:  scanning Claude transcripts...",
       "success-audit",
-      "alpha",
     ]);
     expect(successAudits).toHaveLength(1);
     expect(errorAudits).toHaveLength(0);
@@ -157,11 +155,11 @@ describe("runSyncProgram", () => {
     expect(result.stderr).not.toContain("  starting sync...");
     expect(result.stderr).toContain("  Claude: scanned 3, synced 2, skipped 1 (12ms)");
     expect(result.stderr).toContain("Repair: 4 records, 2 sessions (1.2s)");
-    expect(result.stderr.at(-1)).toBe("Alpha upload: prepared=2, sent=1, failed=1");
-    expect(result.alphaUpload?.failed).toBe(1);
+    expect(result.stderr.at(-1)).toBe("Done in 1.5s");
+    expect(result).not.toHaveProperty("alphaUpload");
   });
 
-  test("records one error audit and does not run alpha after core failure", async () => {
+  test("records one error audit after core failure", async () => {
     const events: string[] = [];
     const failure = SyncInternalFailure.make({ operation: "sync", message: "source failed" });
     const layer = Layer.mergeAll(
@@ -184,12 +182,6 @@ describe("runSyncProgram", () => {
           return Effect.void;
         },
       }),
-      Layer.succeed(SyncAlphaUpload, {
-        run: () => {
-          events.push("alpha");
-          return Effect.succeed(undefined);
-        },
-      }),
     );
 
     const outcome = await Effect.runPromise(
@@ -206,42 +198,7 @@ describe("runSyncProgram", () => {
     ]);
   });
 
-  test("fails open when alpha throws after a successful audit", async () => {
-    const events: string[] = [];
-    const layer = Layer.mergeAll(
-      progressLayer(events),
-      preferencesLayer(events),
-      Layer.succeed(SyncCore, { run: () => Effect.succeed(syncResult) }),
-      Layer.succeed(SyncAudit, {
-        recordSuccess: () => {
-          events.push("success-audit");
-          return Effect.void;
-        },
-        recordError: () => Effect.void,
-      }),
-      Layer.succeed(SyncAlphaUpload, {
-        run: () => {
-          events.push("alpha");
-          return Effect.fail(
-            SyncInternalFailure.make({ operation: "alpha-upload", message: "offline" }),
-          );
-        },
-      }),
-    );
-
-    const result = await Effect.runPromise(runSyncProgram(input).pipe(Effect.provide(layer)));
-
-    expect(events).toEqual([
-      "progress:selftune sync --force --since 2026-01-01",
-      "preferences",
-      "success-audit",
-      "alpha",
-    ]);
-    expect(result.alphaUpload).toBeUndefined();
-    expect(result.stderr.some((line) => line.startsWith("Alpha upload:"))).toBe(false);
-  });
-
-  test("renders a returned failed alpha summary as a separate JSON event", async () => {
+  test("emits only the local sync result in JSON mode", async () => {
     const events: string[] = [];
     const layer = Layer.mergeAll(
       progressLayer(events),
@@ -251,9 +208,6 @@ describe("runSyncProgram", () => {
         recordSuccess: () => Effect.void,
         recordError: () => Effect.void,
       }),
-      Layer.succeed(SyncAlphaUpload, {
-        run: () => Effect.succeed({ enrolled: true, prepared: 1, sent: 0, failed: 1, skipped: 0 }),
-      }),
     );
 
     const result = await Effect.runPromise(
@@ -262,13 +216,7 @@ describe("runSyncProgram", () => {
 
     expect(result.stderr).toEqual([]);
     expect(JSON.parse(result.stdout[0] ?? "")).toEqual(syncResult);
-    expect(JSON.parse(result.stdout[1] ?? "")).toEqual({
-      code: "alpha_upload",
-      enrolled: true,
-      prepared: 1,
-      sent: 0,
-      failed: 1,
-      skipped: 0,
-    });
+    expect(result.stdout).toHaveLength(1);
+    expect(result).not.toHaveProperty("alphaUpload");
   });
 });

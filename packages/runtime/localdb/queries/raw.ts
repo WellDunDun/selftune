@@ -1,7 +1,15 @@
 import type { Database } from "bun:sqlite";
 
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
 import type { SkillUsageRecord } from "../../types.js";
-import { safeParseJson, safeParseJsonArray } from "./json.js";
+import type { queries, session_telemetry, skill_invocations } from "../drizzle-schema.js";
+import { safeParseJsonArray, safeParseToolCounts } from "./json.js";
+
+const decodeSkillScope = Schema.decodeUnknownOption(
+  Schema.Literals(["project", "global", "admin", "system", "unknown"]),
+);
 
 export interface ReportSessionTelemetryRow {
   timestamp: string;
@@ -11,51 +19,31 @@ export interface ReportSessionTelemetryRow {
   last_user_query: string;
 }
 
-export function querySessionTelemetry(
-  db: Database,
-  limit?: number,
-): Array<{
-  timestamp: string;
-  session_id: string;
-  cwd: string;
-  transcript_path: string;
-  tool_calls: Record<string, number>;
-  total_tool_calls: number;
-  bash_commands: string[];
-  skills_triggered: string[];
-  skills_invoked?: string[];
-  assistant_turns: number;
-  errors_encountered: number;
-  transcript_chars: number;
-  last_user_query: string;
-  source?: string;
-  input_tokens?: number;
-  output_tokens?: number;
-}> {
-  const sql =
-    limit != null
-      ? `SELECT * FROM session_telemetry ORDER BY timestamp DESC LIMIT ${limit}`
-      : `SELECT * FROM session_telemetry ORDER BY timestamp DESC`;
-  const rows = db.query(sql).all() as Array<Record<string, unknown>>;
+export function querySessionTelemetry(db: Database, limit?: number) {
+  const rows = db
+    .query<typeof session_telemetry.$inferSelect, [number]>(
+      `SELECT * FROM session_telemetry ORDER BY timestamp DESC LIMIT ?`,
+    )
+    .all(limit ?? -1);
   return rows.map((row) => ({
-    timestamp: row.timestamp as string,
-    session_id: row.session_id as string,
-    cwd: row.cwd as string,
-    transcript_path: row.transcript_path as string,
-    tool_calls: (safeParseJson(row.tool_calls_json as string) as Record<string, number>) ?? {},
-    total_tool_calls: row.total_tool_calls as number,
-    bash_commands: safeParseJsonArray<string>(row.bash_commands_json as string),
-    skills_triggered: safeParseJsonArray<string>(row.skills_triggered_json as string),
+    timestamp: row.timestamp,
+    session_id: row.session_id,
+    cwd: row.cwd ?? "",
+    transcript_path: row.transcript_path ?? "",
+    tool_calls: safeParseToolCounts(row.tool_calls_json),
+    total_tool_calls: row.total_tool_calls ?? 0,
+    bash_commands: safeParseJsonArray(row.bash_commands_json),
+    skills_triggered: safeParseJsonArray(row.skills_triggered_json),
     skills_invoked: row.skills_invoked_json
-      ? safeParseJsonArray<string>(row.skills_invoked_json as string)
+      ? safeParseJsonArray(row.skills_invoked_json)
       : undefined,
-    assistant_turns: row.assistant_turns as number,
-    errors_encountered: row.errors_encountered as number,
-    transcript_chars: (row.transcript_chars as number) ?? 0,
-    last_user_query: (row.last_user_query as string) ?? "",
-    source: row.source as string | undefined,
-    input_tokens: row.input_tokens as number | undefined,
-    output_tokens: row.output_tokens as number | undefined,
+    assistant_turns: row.assistant_turns ?? 0,
+    errors_encountered: row.errors_encountered ?? 0,
+    transcript_chars: row.transcript_chars ?? 0,
+    last_user_query: row.last_user_query ?? "",
+    source: row.source ?? undefined,
+    input_tokens: row.input_tokens ?? undefined,
+    output_tokens: row.output_tokens ?? undefined,
   }));
 }
 
@@ -119,44 +107,43 @@ export function queryKnownWorkspacePaths(db: Database): string[] {
 }
 
 export function querySkillRecords(db: Database, limit?: number): SkillUsageRecord[] {
-  const sql =
-    limit != null
-      ? `SELECT occurred_at, session_id, skill_name, skill_path, skill_scope, query, triggered, source
-     FROM skill_invocations ORDER BY occurred_at DESC LIMIT ${limit}`
-      : `SELECT occurred_at, session_id, skill_name, skill_path, skill_scope, query, triggered, source
-     FROM skill_invocations ORDER BY occurred_at DESC`;
-  const rows = db.query(sql).all() as Array<Record<string, unknown>>;
+  const rows = db
+    .query<
+      Pick<
+        typeof skill_invocations.$inferSelect,
+        | "occurred_at"
+        | "session_id"
+        | "skill_name"
+        | "skill_path"
+        | "skill_scope"
+        | "query"
+        | "triggered"
+        | "source"
+      >,
+      [number]
+    >(`SELECT occurred_at, session_id, skill_name, skill_path, skill_scope, query, triggered, source
+     FROM skill_invocations ORDER BY occurred_at DESC LIMIT ?`)
+    .all(limit ?? -1);
   return rows.map((row) => ({
-    timestamp: row.occurred_at as string,
-    session_id: row.session_id as string,
-    skill_name: row.skill_name as string,
-    skill_path: row.skill_path as string,
-    skill_scope: row.skill_scope as SkillUsageRecord["skill_scope"],
-    query: row.query as string,
-    triggered: (row.triggered as number) === 1,
-    source: row.source as string | undefined,
+    timestamp: row.occurred_at ?? "",
+    session_id: row.session_id,
+    skill_name: row.skill_name,
+    skill_path: row.skill_path ?? "",
+    skill_scope: Option.getOrUndefined(decodeSkillScope(row.skill_scope)),
+    query: row.query ?? "",
+    triggered: row.triggered === 1,
+    source: row.source ?? undefined,
   }));
 }
 
 export const querySkillUsageRecords = querySkillRecords;
 
-export function queryQueryLog(
-  db: Database,
-  limit?: number,
-): Array<{
-  timestamp: string;
-  session_id: string;
-  query: string;
-  source?: string;
-}> {
-  const sql =
-    limit != null
-      ? `SELECT timestamp, session_id, query, source FROM queries ORDER BY timestamp DESC LIMIT ${limit}`
-      : `SELECT timestamp, session_id, query, source FROM queries ORDER BY timestamp DESC`;
-  return db.query(sql).all() as Array<{
-    timestamp: string;
-    session_id: string;
-    query: string;
-    source?: string;
-  }>;
+export function queryQueryLog(db: Database, limit?: number) {
+  return db
+    .query<
+      Pick<typeof queries.$inferSelect, "timestamp" | "session_id" | "query" | "source">,
+      [number]
+    >(`SELECT timestamp, session_id, query, source FROM queries ORDER BY timestamp DESC LIMIT ?`)
+    .all(limit ?? -1)
+    .map((row) => ({ ...row, source: row.source ?? undefined }));
 }

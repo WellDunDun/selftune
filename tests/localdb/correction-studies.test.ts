@@ -10,6 +10,7 @@ import {
   getCorrectionStudy,
   getDb,
   openDb,
+  queryCorrectionPipelineMetrics,
 } from "@selftune/local-store";
 import * as Effect from "effect/Effect";
 
@@ -34,7 +35,7 @@ function correctionStudy(
   const manifestJson = overrides.manifest_json ?? JSON.stringify({ task: "repair one file" });
   const includeCase = overrides.include_case ?? true;
   const evidenceStatus = overrides.evidence_status ?? "qualified";
-  return {
+  const study = {
     episode: {
       episode_id: episodeId,
       capture_key: overrides.capture_key ?? "capture-001",
@@ -68,27 +69,27 @@ function correctionStudy(
       trial_payload_json: JSON.stringify({ old_fails: true, corrected_passes: true }),
       recorded_at: "2026-07-28T08:01:00.000Z",
     },
-    ...(includeCase
-      ? {
-          promoted_case: {
-            case_id: overrides.case_id ?? "case-001",
-            episode_id: episodeId,
-            evidence_id: evidenceId,
-            skill_id: "skill-001",
-            skill_name: "repair-skill",
-            pre_revision: beforeRevision,
-            post_revision: afterRevision,
-            manifest_json: manifestJson,
-            verifier_payload_json: JSON.stringify({ kind: "deterministic", version: "v1" }),
-            trial_payload_json: JSON.stringify({ old_fails: true, corrected_passes: true }),
-            evidence_level: "E1",
-            status: "active",
-            reason: null,
-            promoted_at: "2026-07-28T08:02:00.000Z",
-            created_at: "2026-07-28T08:02:00.000Z",
-          },
-        }
-      : {}),
+  } satisfies CreateOrGetCorrectionStudy;
+  if (!includeCase) return study;
+  return {
+    ...study,
+    promoted_case: {
+      case_id: overrides.case_id ?? "case-001",
+      episode_id: episodeId,
+      evidence_id: evidenceId,
+      skill_id: "skill-001",
+      skill_name: "repair-skill",
+      pre_revision: beforeRevision,
+      post_revision: afterRevision,
+      manifest_json: manifestJson,
+      verifier_payload_json: JSON.stringify({ kind: "deterministic", version: "v1" }),
+      trial_payload_json: JSON.stringify({ old_fails: true, corrected_passes: true }),
+      evidence_level: "E1",
+      status: "active",
+      reason: null,
+      promoted_at: "2026-07-28T08:02:00.000Z",
+      created_at: "2026-07-28T08:02:00.000Z",
+    },
   };
 }
 
@@ -221,3 +222,65 @@ test("rejects a reused evidence id before creating an orphan episode", () => {
 
   expect(Effect.runSync(getCorrectionStudy(getDb(), "episode-002"))).toBeNull();
 });
+
+test("rejects malformed persisted episode fields without rewriting the stored evidence", () => {
+  Effect.runSync(createOrGetCorrectionStudy(getDb(), correctionStudy()));
+  getDb().run(
+    "UPDATE correction_episodes SET harness = 'invalid harness' WHERE episode_id = 'episode-001'",
+  );
+  const result = Effect.runSync(getCorrectionStudy(getDb(), "episode-001").pipe(Effect.result));
+  expect(result._tag).toBe("Failure");
+  if (result._tag !== "Failure") throw new Error("Expected invalid persisted episode to fail");
+  expect(result.failure.operation).toBe("decode persisted correction episode");
+  expect(
+    getDb()
+      .query<{ harness: string }, []>(
+        "SELECT harness FROM correction_episodes WHERE episode_id = 'episode-001'",
+      )
+      .get(),
+  ).toEqual({ harness: "invalid harness" });
+});
+
+test.each([
+  "not JSON",
+  "null",
+  "[]",
+  "{}",
+  '{"censored_attempts":"3"}',
+  '{"censored_attempts":null}',
+  '{"censored_attempts":-1}',
+  '{"censored_attempts":1.5}',
+  '{"censored_attempts":9007199254740992}',
+])(
+  "ignores invalid saved censored counts while retaining valid neighboring evidence: %s",
+  (payload) => {
+    Effect.runSync(createOrGetCorrectionStudy(getDb(), correctionStudy()));
+    const valid = correctionStudy({
+      include_case: false,
+      evidence_status: "inconclusive",
+      episode_id: "episode-002",
+      capture_key: "capture-002",
+      evidence_id: "evidence-002",
+      evidence_key: "evidence-key-002",
+      case_id: "case-002",
+    });
+    Effect.runSync(
+      createOrGetCorrectionStudy(getDb(), {
+        ...valid,
+        evidence: { ...valid.evidence, trial_payload_json: '{"censored_attempts":3}' },
+      }),
+    );
+    getDb().run(
+      "UPDATE correction_evidence_ledger_entries SET trial_payload_json = ? WHERE evidence_id = 'evidence-001'",
+      [payload],
+    );
+    expect(queryCorrectionPipelineMetrics(getDb()).infrastructure_censored_attempts).toBe(3);
+    expect(
+      getDb()
+        .query<{ trial_payload_json: string }, []>(
+          "SELECT trial_payload_json FROM correction_evidence_ledger_entries WHERE evidence_id = 'evidence-001'",
+        )
+        .get(),
+    ).toEqual({ trial_payload_json: payload });
+  },
+);

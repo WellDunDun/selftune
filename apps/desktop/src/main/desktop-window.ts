@@ -2,7 +2,15 @@ import { randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, session, shell, type IpcMainInvokeEvent, type Session } from "electron";
+import {
+  BrowserWindow,
+  session,
+  shell,
+  type BrowserWindowConstructorOptions,
+  type IpcMainInvokeEvent,
+  type Session,
+  type WebPreferences,
+} from "electron";
 
 import {
   PENDING_WINDOW_IPC_TEST_DOCUMENT,
@@ -164,7 +172,16 @@ export function createDesktopWindowController(
     }
     const authenticatedSession =
       navigationTrust === "internal" ? configureSessionAuth(connection) : null;
-    const window = new BrowserWindow({
+    const webPreferences: WebPreferences = {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      preload: preloadPath,
+    };
+    if (testProbeEnabled)
+      webPreferences.additionalArguments = [PENDING_WINDOW_IPC_TEST_PRELOAD_ARGUMENT];
+    if (authenticatedSession) webPreferences.session = authenticatedSession.session;
+    const windowOptions: BrowserWindowConstructorOptions = {
       width: 1440,
       height: 940,
       minWidth: process.platform === "darwin" ? 1024 : 980,
@@ -172,23 +189,13 @@ export function createDesktopWindowController(
       show: false,
       backgroundColor: "#07090d",
       title: "SelfTune",
-      ...(process.platform === "darwin"
-        ? {
-            titleBarStyle: "hidden" as const,
-            trafficLightPosition: { x: 16, y: 17 },
-          }
-        : {}),
-      webPreferences: {
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-        preload: preloadPath,
-        ...(testProbeEnabled
-          ? { additionalArguments: [PENDING_WINDOW_IPC_TEST_PRELOAD_ARGUMENT] }
-          : {}),
-        ...(authenticatedSession ? { session: authenticatedSession.session } : {}),
-      },
-    });
+      webPreferences,
+    };
+    if (process.platform === "darwin") {
+      windowOptions.titleBarStyle = "hidden";
+      windowOptions.trafficLightPosition = { x: 16, y: 17 };
+    }
+    const window = new BrowserWindow(windowOptions);
     let disposed = false;
     const owned: OwnedWindow = {
       baseUrl: connection.baseUrl,
@@ -405,7 +412,7 @@ export function createDesktopWindowController(
 
   function showLaunching(): void {
     if (quitting || launchWindow) return;
-    const window = new BrowserWindow({
+    const windowOptions: BrowserWindowConstructorOptions = {
       width: 420,
       height: 480,
       resizable: false,
@@ -414,17 +421,14 @@ export function createDesktopWindowController(
       show: false,
       backgroundColor: "#07090d",
       title: "SelfTune",
-      ...(process.platform === "darwin"
-        ? {
-            titleBarStyle: "hidden" as const,
-          }
-        : {}),
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
       },
-    });
+    };
+    if (process.platform === "darwin") windowOptions.titleBarStyle = "hidden";
+    const window = new BrowserWindow(windowOptions);
     launchWindow = window;
     window.once("ready-to-show", () => {
       if (launchWindow === window && !window.isDestroyed()) window.show();

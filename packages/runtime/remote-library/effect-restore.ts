@@ -14,7 +14,10 @@ import { openDb } from "@selftune/local-store";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import { mergeSkillIntelligenceLearnedState } from "../skill-intelligence/learned-state.js";
+import {
+  mergeSkillIntelligenceLearnedState,
+  SkillIntelligenceLearnedState,
+} from "../skill-intelligence/learned-state.js";
 import { CLIError } from "../utils/cli-error.js";
 import { computeSkillVersionHash } from "../utils/skill-discovery.js";
 import { artifactPackageIdentity, assertSafeRelativePath } from "./package-identity.js";
@@ -41,7 +44,7 @@ interface RestoreArtifactOptions {
 }
 
 interface RestoredArtifact {
-  readonly learnedState?: unknown;
+  readonly learnedState?: SkillIntelligenceLearnedState;
 }
 
 function localFailure(cause: unknown): CLIError {
@@ -172,11 +175,13 @@ function restoreDecisionHistory(options: RestoreArtifactOptions): void {
   writeFileSync(path, options.bytes);
 }
 
-function restoreLearnedState(options: RestoreArtifactOptions): unknown {
+function restoreLearnedState(options: RestoreArtifactOptions): SkillIntelligenceLearnedState {
+  const parsed = Schema.decodeUnknownSync(Schema.fromJsonString(SkillIntelligenceLearnedState))(
+    new TextDecoder().decode(options.bytes),
+  );
   const path = join(options.staging, "learned-state", `${options.artifact.objectHash}.json`);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, options.bytes);
-  const parsed: unknown = JSON.parse(new TextDecoder().decode(options.bytes));
   return parsed;
 }
 
@@ -211,7 +216,7 @@ const restoreArtifact = Effect.fn("selftune.runtime.remoteLibrary.restoreArtifac
 });
 
 const mergeLearnedStates = Effect.fn("selftune.runtime.remoteLibrary.mergeLearnedStates")(
-  function* (staging: string, learnedStates: ReadonlyArray<unknown>) {
+  function* (staging: string, learnedStates: ReadonlyArray<SkillIntelligenceLearnedState>) {
     if (learnedStates.length === 0) return;
 
     yield* Effect.acquireUseRelease(
@@ -249,7 +254,7 @@ const restoreSnapshot = Effect.fn("selftune.runtime.remoteLibrary.restoreSnapsho
     acquireStaging(targetRoot),
     (staging) =>
       Effect.gen(function* () {
-        const learnedStates: unknown[] = [];
+        const learnedStates: SkillIntelligenceLearnedState[] = [];
         const artifacts = [...snapshot.artifacts].toSorted((left, right) =>
           left.updatedAt.localeCompare(right.updatedAt),
         );
@@ -262,7 +267,7 @@ const restoreSnapshot = Effect.fn("selftune.runtime.remoteLibrary.restoreSnapsho
             targetRoot,
             snapshotCreatedAt: snapshot.createdAt,
           });
-          if ("learnedState" in restored) learnedStates.push(restored.learnedState);
+          if (restored.learnedState !== undefined) learnedStates.push(restored.learnedState);
         }
         yield* mergeLearnedStates(staging, learnedStates);
         yield* localEffect(() => {

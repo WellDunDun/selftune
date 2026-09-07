@@ -1,44 +1,11 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ApplyOnboardingResponse, DesktopSettingsResponse } from "@/types";
-
-const navigate = vi.fn();
-const mutate = vi.fn();
-
-vi.mock("react-router-dom", () => ({
-  useNavigate: () => navigate,
-}));
-
-vi.mock("@/hooks/useSettings", () => ({
-  useApplyOnboarding: () => ({ isPending: false, mutate }),
-}));
-
-vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
-}));
-
-vi.mock("@/components/HarnessLogo", () => ({ HarnessLogo: () => null }));
-vi.mock("@/components/ui/switch", () => ({
-  Switch: ({ "aria-label": ariaLabel }: { "aria-label": string }) => (
-    <button aria-label={ariaLabel} />
-  ),
-}));
-vi.mock("@/components/ui/button", () => ({
-  Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
-  ),
-}));
-vi.mock("@/components/ui/dialog", () => ({
-  Dialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
-  DialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
-}));
 
 import { SetupWizard } from "./SetupWizard";
 
@@ -89,10 +56,27 @@ const settings: DesktopSettingsResponse = {
   schedule: { supported: true, format: "launchd", settings_path: "/tmp/jobs.json", jobs: [] },
 };
 
+const originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+
+function renderSetup() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={["/settings"]}>
+        <Routes>
+          <Route path="/settings" element={<SetupWizard settings={settings} />} />
+          <Route path="/skills" element={<h1>Skills Library</h1>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
 afterEach(() => {
   cleanup();
-  navigate.mockReset();
-  mutate.mockReset();
+  vi.restoreAllMocks();
+  if (originalClipboard) Object.defineProperty(navigator, "clipboard", originalClipboard);
+  else Reflect.deleteProperty(navigator, "clipboard");
 });
 
 describe("SetupWizard", () => {
@@ -103,31 +87,54 @@ describe("SetupWizard", () => {
       value: { writeText },
     });
 
-    render(<SetupWizard settings={settings} />);
+    const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Unexpected request"));
+    renderSetup();
     fireEvent.click(screen.getByRole("button", { name: /copy prompt for my ai agent/i }));
 
     expect(writeText).toHaveBeenCalledWith(
       expect.stringContaining("If the SelfTune skill is not already installed"),
     );
     expect(screen.getByText("npx skills add selftune-dev/selftune")).toBeTruthy();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("opens the cleanup overview after selected history is processed", () => {
-    mutate.mockImplementation((_request, callbacks) => {
-      callbacks.onSuccess({
-        ...settings,
-        onboarding: { ...settings.onboarding, completed: true },
-        install_results: [],
-        source_sync: { status: "processed", message: null },
-      } satisfies ApplyOnboardingResponse);
-    });
+  it("explains on-demand use, saves selected features, and opens the Library after setup", async () => {
+    const completed = {
+      ...settings,
+      onboarding: { ...settings.onboarding, completed: true },
+      install_results: [],
+      source_sync: { status: "processed", message: null },
+    } satisfies ApplyOnboardingResponse;
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => Response.json(completed));
+    renderSetup();
+    for (let step = 0; step < 3; step += 1) {
+      fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    }
+    fireEvent.click(screen.getByRole("switch", { name: /Enable Health recommendations$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
-    render(<SetupWizard settings={settings} />);
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    expect(screen.getByText(/keep specialist skills ready/i)).toBeTruthy();
+    expect(screen.getByText(/Corey Haines marketing skills/i)).toBeTruthy();
+    expect(fetch).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /apply setup/i }));
-
-    expect(navigate).toHaveBeenCalledWith("/", { replace: true });
+    await screen.findByRole("heading", { name: "Skills Library" });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v2/settings/onboarding",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          import_sources: [],
+          hook_harnesses: [],
+          features: {
+            observability: true,
+            health_recommendations: false,
+            autonomous_improvement: false,
+          },
+        }),
+      }),
+    );
   });
 });

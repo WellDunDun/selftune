@@ -7,14 +7,7 @@ import {
 } from "lucide-react";
 import type { SkillHealthStatus } from "../types";
 
-export const STATUS_CONFIG: Record<
-  SkillHealthStatus,
-  {
-    icon: React.ReactNode;
-    variant: "default" | "secondary" | "destructive" | "outline";
-    label: string;
-  }
-> = {
+export const STATUS_CONFIG = {
   HEALTHY: {
     icon: <CheckCircleIcon className="size-4 text-success" />,
     variant: "outline",
@@ -40,4 +33,11 @@ export const STATUS_CONFIG: Record<
     variant: "secondary",
     label: "Unknown",
   },
-};
+} satisfies Record<
+  SkillHealthStatus,
+  {
+    icon: React.ReactNode;
+    variant: "default" | "secondary" | "destructive" | "outline";
+    label: string;
+  }
+>;

@@ -1,3 +1,5 @@
+import type { CreatePackageEvaluationResult } from "../../packages/runtime/create/package-evaluator.js";
+import type { CreateCheckResult } from "../../packages/runtime/types.js";
 import { describe, expect, it, test } from "bun:test";
 
 import { checkPublishWatchGate, runCreatePublish } from "../../packages/runtime/create/publish.js";
@@ -44,6 +46,18 @@ const passingPackageEvaluation = {
     pass_rate: 1,
     fixture_id: "fixture-1",
     results: [],
+    runtime_metrics: {
+      eval_runs: 0,
+      usage_observations: 0,
+      total_duration_ms: 0,
+      avg_duration_ms: 0,
+      total_input_tokens: null,
+      total_output_tokens: null,
+      total_cache_creation_input_tokens: null,
+      total_cache_read_input_tokens: null,
+      total_cost_usd: null,
+      total_turns: null,
+    },
   },
   baseline: {
     skill_name: "research-assistant",
@@ -55,7 +69,7 @@ const passingPackageEvaluation = {
     per_entry: [],
     measured_at: "2026-04-14T12:00:00.000Z",
   },
-};
+} satisfies CreatePackageEvaluationResult;
 
 const readyToPublishCheck = {
   skill: "research-assistant",
@@ -113,7 +127,7 @@ const readyToPublishCheck = {
       },
     },
   },
-};
+} satisfies CreateCheckResult;
 
 describe("selftune create publish", () => {
   it("returns the shared package evaluation before handing off to watch", async () => {
@@ -228,8 +242,8 @@ describe("selftune create publish", () => {
 
   it("starts watch only after package replay and baseline succeed", async () => {
     const commands: string[][] = [];
-    let storedPackageEvaluation: unknown = null;
-    let refreshedPackageEvaluation: unknown = null;
+    const storedPackageEvaluations: CreatePackageEvaluationResult["summary"][] = [];
+    const refreshedPackageEvaluations: CreatePackageEvaluationResult[] = [];
     const result = await runCreatePublish(
       {
         skillPath: "/tmp/research-assistant/SKILL.md",
@@ -239,14 +253,14 @@ describe("selftune create publish", () => {
         computeCreateCheckResult: async () => readyToPublishCheck,
         runCreatePackageEvaluation: async () => passingPackageEvaluation,
         refreshPackageCandidateEvaluationObservation: (evaluation) => {
-          refreshedPackageEvaluation = evaluation;
+          refreshedPackageEvaluations.push(evaluation);
           return evaluation;
         },
         writeCanonicalPackageEvaluation: (_skillName, summary) => {
-          storedPackageEvaluation = summary;
+          storedPackageEvaluations.push(summary);
           return "/tmp/.selftune/package-evaluations/research-assistant.json";
         },
-        spawnSync: ((command) => {
+        spawnSync: (command) => {
           commands.push(command);
           return {
             stdout: new TextEncoder().encode(
@@ -279,7 +293,7 @@ describe("selftune create publish", () => {
             stderr: new Uint8Array(),
             exitCode: 0,
           };
-        }) as typeof Bun.spawnSync,
+        },
       },
     );
 
@@ -319,11 +333,14 @@ describe("selftune create publish", () => {
     });
     expect(result.next_command).toBeNull();
     expect(commands).toHaveLength(1);
-    expect(storedPackageEvaluation).toEqual(result.package_evaluation);
-    expect(refreshedPackageEvaluation).toEqual({
-      ...passingPackageEvaluation,
-      summary: result.package_evaluation,
-    });
+    if (!result.package_evaluation) throw new Error("Expected a published evaluation.");
+    expect(storedPackageEvaluations).toEqual([result.package_evaluation]);
+    expect(refreshedPackageEvaluations).toEqual([
+      {
+        ...passingPackageEvaluation,
+        summary: result.package_evaluation,
+      },
+    ]);
     expect(commands[0]?.slice(3)).toEqual([
       "watch",
       "--skill",
@@ -343,7 +360,7 @@ describe("selftune create publish", () => {
       {
         computeCreateCheckResult: async () => readyToPublishCheck,
         runCreatePackageEvaluation: async () => passingPackageEvaluation,
-        spawnSync: (() => ({
+        spawnSync: () => ({
           stdout: new TextEncoder().encode(
             JSON.stringify({
               snapshot: {
@@ -375,7 +392,7 @@ describe("selftune create publish", () => {
           ),
           stderr: new Uint8Array(),
           exitCode: 1,
-        })) as typeof Bun.spawnSync,
+        }),
       },
     );
 
@@ -404,11 +421,11 @@ describe("selftune create publish", () => {
       {
         computeCreateCheckResult: async () => readyToPublishCheck,
         runCreatePackageEvaluation: async () => passingPackageEvaluation,
-        spawnSync: (() => ({
+        spawnSync: () => ({
           stdout: new TextEncoder().encode("watch crashed before JSON output"),
           stderr: new TextEncoder().encode("boom"),
           exitCode: 1,
-        })) as typeof Bun.spawnSync,
+        }),
       },
     );
 
@@ -434,11 +451,11 @@ describe("selftune create publish", () => {
       {
         computeCreateCheckResult: async () => readyToPublishCheck,
         runCreatePackageEvaluation: async () => passingPackageEvaluation,
-        spawnSync: (() => ({
+        spawnSync: () => ({
           stdout: new TextEncoder().encode("watch crashed before JSON output"),
           stderr: new TextEncoder().encode("boom"),
           exitCode: 1,
-        })) as typeof Bun.spawnSync,
+        }),
       },
     );
 
@@ -464,7 +481,7 @@ describe("selftune create publish", () => {
       {
         computeCreateCheckResult: async () => readyToPublishCheck,
         runCreatePackageEvaluation: async () => passingPackageEvaluation,
-        spawnSync: (() => ({
+        spawnSync: () => ({
           stdout: new TextEncoder().encode(
             JSON.stringify({
               snapshot: {
@@ -496,7 +513,7 @@ describe("selftune create publish", () => {
           ),
           stderr: new Uint8Array(),
           exitCode: 1,
-        })) as typeof Bun.spawnSync,
+        }),
       },
     );
 
@@ -517,7 +534,7 @@ describe("selftune create publish", () => {
       {
         computeCreateCheckResult: async () => readyToPublishCheck,
         runCreatePackageEvaluation: async () => passingPackageEvaluation,
-        spawnSync: (() => ({
+        spawnSync: () => ({
           stdout: new TextEncoder().encode(
             JSON.stringify({
               snapshot: {
@@ -546,7 +563,7 @@ describe("selftune create publish", () => {
           ),
           stderr: new Uint8Array(),
           exitCode: 1,
-        })) as typeof Bun.spawnSync,
+        }),
       },
     );
 
@@ -566,7 +583,7 @@ describe("selftune create publish", () => {
       {
         computeCreateCheckResult: async () => readyToPublishCheck,
         runCreatePackageEvaluation: async () => passingPackageEvaluation,
-        spawnSync: (() => ({
+        spawnSync: () => ({
           stdout: new TextEncoder().encode(
             JSON.stringify({
               snapshot: {
@@ -595,7 +612,7 @@ describe("selftune create publish", () => {
           ),
           stderr: new Uint8Array(),
           exitCode: 1,
-        })) as typeof Bun.spawnSync,
+        }),
       },
     );
 

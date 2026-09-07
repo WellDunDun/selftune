@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import {
   _setTestDb,
   getCorrectionLearningPolicy,
+  listCorrectionLearningPolicies,
+  listCorrectionReviewDecisions,
   getDb,
   openDb,
   purgeExpiredE0CorrectionSourceMaterial,
@@ -17,6 +19,7 @@ import {
   listLatestCorrectionCandidateEvaluations,
   queryCorrectionPipelineMetrics,
   upsertCorrectionSignalCandidate,
+  type CorrectionSignalCandidate,
 } from "@selftune/local-store";
 import * as Effect from "effect/Effect";
 import { correctionCapabilityEnabled } from "@selftune/runtime/correction-study/review-policy";
@@ -24,7 +27,7 @@ import { correctionCapabilityEnabled } from "@selftune/runtime/correction-study/
 const stamp = "2026-07-29T10:00:00.000Z";
 const digest = (value: string) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
 
-function candidate(id: string, manifest = "a"): object {
+function candidate(id: string, manifest = "a") {
   const payload = JSON.stringify({ id });
   return {
     candidate_id: id,
@@ -40,7 +43,7 @@ function candidate(id: string, manifest = "a"): object {
     signal_payload_json: payload,
     created_at: stamp,
     updated_at: stamp,
-  };
+  } satisfies CorrectionSignalCandidate;
 }
 
 beforeEach(() => _setTestDb(openDb(":memory:")));
@@ -83,6 +86,30 @@ test("capture stays local under kill switch or concurrency while execution paths
   expect(correctionCapabilityEnabled({ ...policy, capture_enabled: false }, "capture", 0)).toBe(
     false,
   );
+});
+
+test("lists persisted policies in workspace order with bounded typed values", () => {
+  const policyB = getCorrectionLearningPolicy(getDb(), "workspace-b");
+  const policyA = setCorrectionLearningPolicy(getDb(), "workspace-a", {
+    ...policyB,
+    capture_enabled: false,
+    proactive_generation_enabled: true,
+    managed_execution_enabled: true,
+    kill_switch_enabled: true,
+    workspace_budget: 100,
+    max_concurrency: 4,
+    retention_e0_days: 60,
+    updated_at: stamp,
+  });
+  expect(getCorrectionLearningPolicy(getDb(), "workspace-a")).toEqual(policyA);
+  expect(listCorrectionLearningPolicies(getDb())).toEqual([
+    { workspace_id: "workspace-a", policy: policyA },
+    { workspace_id: "workspace-b", policy: policyB },
+  ]);
+  expect(listCorrectionLearningPolicies(getDb(), 1)).toEqual([
+    { workspace_id: "workspace-a", policy: policyA },
+  ]);
+  expect(() => listCorrectionLearningPolicies(getDb(), 201)).toThrow("Invalid policy limit");
 });
 
 test("records append-only decisions and requires new deferred evidence for an edit", () => {
@@ -143,6 +170,22 @@ test("records append-only decisions and requires new deferred evidence for an ed
       .query<{ count: number }, []>("SELECT COUNT(*) AS count FROM correction_review_decisions")
       .get()?.count,
   ).toBe(2);
+  expect(listCorrectionReviewDecisions(getDb(), "candidate-old", 1)).toEqual([
+    {
+      decision_id: "decision-defer",
+      candidate_id: "candidate-old",
+      replacement_candidate_id: null,
+      action: "defer",
+      actor: "reviewer",
+      reason: "review later",
+      manifest_digest: `sha256:${"a".repeat(64)}`,
+      decided_at: stamp,
+    },
+  ]);
+  expect(listCorrectionReviewDecisions(getDb(), "candidate-new")).toEqual([]);
+  expect(() => listCorrectionReviewDecisions(getDb(), "candidate-old", 0)).toThrow(
+    "Invalid decision limit",
+  );
 });
 
 test("makes accept and reject terminal while keeping identical delivery idempotent", () => {

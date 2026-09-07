@@ -11,6 +11,7 @@ import { makeEffectCliTestProgram } from "../../apps/cli/src/effect-cli/program.
 import { isEffectCliInvocation } from "../../apps/cli/src/effect-cli/selection.js";
 
 const CLI_ENTRYPOINT = fileURLToPath(new URL("../../apps/cli/src/main.ts", import.meta.url));
+const READ_ONLY_COMMANDS = ["doctor", "status", "last", "quickstart"] as const;
 const temporaryRoots: string[] = [];
 
 afterEach(() => {
@@ -146,22 +147,18 @@ describe("Effect CLI read-only command family", () => {
     expect(existsSync(join(root, ".selftune"))).toBe(false);
   });
 
-  test("rejects flags and positionals outside the empty command grammar", async () => {
-    const root = mkdtempSync(join(tmpdir(), "selftune-effect-read-only-grammar-"));
-    temporaryRoots.push(root);
+  test.each(READ_ONLY_COMMANDS)(
+    "rejects flags and positionals outside the %s command grammar",
+    async (command) => {
+      const root = mkdtempSync(join(tmpdir(), "selftune-effect-read-only-grammar-"));
+      temporaryRoots.push(root);
 
-    const results = await Promise.all(
-      ["doctor", "status", "last", "quickstart"].map(async (command) => {
-        const [unknownFlag, positional, positionalAfterMarker] = await Promise.all([
-          runCliEntrypoint([command, "--json"], root),
-          runCliEntrypoint([command, "unexpected"], root),
-          runCliEntrypoint([command, "--", "--help"], root),
-        ]);
-        return { command, positional, positionalAfterMarker, unknownFlag };
-      }),
-    );
+      const [unknownFlag, positional, positionalAfterMarker] = await Promise.all([
+        runCliEntrypoint([command, "--json"], root),
+        runCliEntrypoint([command, "unexpected"], root),
+        runCliEntrypoint([command, "--", "--help"], root),
+      ]);
 
-    for (const { command, positional, positionalAfterMarker, unknownFlag } of results) {
       expect(unknownFlag.exitCode).toBe(1);
       expect(unknownFlag.stdout).toBe("");
       expect(unknownFlag.stderr).toContain("Unknown option '--json'");
@@ -176,95 +173,65 @@ describe("Effect CLI read-only command family", () => {
       expect(positionalAfterMarker.stdout).toBe("");
       expect(positionalAfterMarker.stderr).toContain("Unexpected argument '--help'");
       expect(positionalAfterMarker.stderr).toContain(`selftune ${command} --help`);
-    }
 
-    expect(existsSync(join(root, ".selftune"))).toBe(false);
-  });
+      expect(existsSync(join(root, ".selftune"))).toBe(false);
+    },
+  );
 
-  test("rejects missing and invalid global values before running a handler", async () => {
-    const root = mkdtempSync(join(tmpdir(), "selftune-effect-read-only-global-values-"));
-    temporaryRoots.push(root);
+  test.each(READ_ONLY_COMMANDS)(
+    "rejects missing and invalid global values for %s before running a handler",
+    async (command) => {
+      const root = mkdtempSync(join(tmpdir(), "selftune-effect-read-only-global-values-"));
+      temporaryRoots.push(root);
 
-    const results = await Promise.all(
-      ["doctor", "status", "last", "quickstart"].map(async (command) => {
-        const [missingCompletions, missingLogLevel, invalidCompletions, invalidLogLevel] =
-          await Promise.all([
-            runCliEntrypoint([command, "--completions"], root),
-            runCliEntrypoint([command, "--log-level"], root),
-            runCliEntrypoint([command, "--completions", "powershell"], root),
-            runCliEntrypoint([command, "--log-level=verbose"], root),
-          ]);
-        return {
-          command,
-          invalidCompletions,
-          invalidLogLevel,
-          missingCompletions,
-          missingLogLevel,
-        };
-      }),
-    );
+      const [missingCompletions, missingLogLevel, invalidCompletions, invalidLogLevel] =
+        await Promise.all([
+          runCliEntrypoint([command, "--completions"], root),
+          runCliEntrypoint([command, "--log-level"], root),
+          runCliEntrypoint([command, "--completions", "powershell"], root),
+          runCliEntrypoint([command, "--log-level=verbose"], root),
+        ]);
 
-    for (const result of results) {
-      for (const malformed of [result.missingCompletions, result.missingLogLevel]) {
+      for (const malformed of [missingCompletions, missingLogLevel]) {
         expect(malformed.exitCode).toBe(1);
         expect(malformed.stdout).toBe("");
         expect(malformed.stderr).toContain("<value>' argument missing");
-        expect(malformed.stderr).toContain(`selftune ${result.command} --help`);
+        expect(malformed.stderr).toContain(`selftune ${command} --help`);
       }
-      for (const malformed of [result.invalidCompletions, result.invalidLogLevel]) {
+      for (const malformed of [invalidCompletions, invalidLogLevel]) {
         expect(malformed.exitCode).toBe(1);
         expect(malformed.stdout).toBe("");
         expect(malformed.stderr).toContain("Invalid value");
         expect(malformed.stderr).not.toContain("timestamp=");
-        expect(malformed.stderr).toContain(`selftune ${result.command} --help`);
+        expect(malformed.stderr).toContain(`selftune ${command} --help`);
       }
-    }
 
-    expect(existsSync(join(root, ".selftune"))).toBe(false);
-  });
+      expect(existsSync(join(root, ".selftune"))).toBe(false);
+    },
+  );
 
-  test("rejects malformed arguments even when help or version would short-circuit", async () => {
-    const root = mkdtempSync(join(tmpdir(), "selftune-effect-read-only-short-circuit-"));
-    temporaryRoots.push(root);
+  test.each(READ_ONLY_COMMANDS)(
+    "rejects malformed %s arguments even when help or version would short-circuit",
+    async (command) => {
+      const root = mkdtempSync(join(tmpdir(), "selftune-effect-read-only-short-circuit-"));
+      temporaryRoots.push(root);
 
-    const results = await Promise.all(
-      ["doctor", "status", "last", "quickstart"].map(async (command) => {
-        const [
-          compatibleHelp,
-          helpMissingValue,
-          helpPositional,
-          helpUnknown,
-          versionPositional,
-          versionUnknown,
-        ] = await Promise.all([
-          runCliEntrypoint([command, "--help", "--log-level", "info"], root),
-          runCliEntrypoint([command, "--help", "--log-level"], root),
-          runCliEntrypoint([command, "--help", "unexpected"], root),
-          runCliEntrypoint([command, "--help", "--unknown"], root),
-          runCliEntrypoint([command, "--version", "unexpected"], root),
-          runCliEntrypoint([command, "--version", "--unknown"], root),
-        ]);
-        return {
-          command,
-          compatibleHelp,
-          helpMissingValue,
-          helpPositional,
-          helpUnknown,
-          versionPositional,
-          versionUnknown,
-        };
-      }),
-    );
+      const [
+        compatibleHelp,
+        helpMissingValue,
+        helpPositional,
+        helpUnknown,
+        versionPositional,
+        versionUnknown,
+      ] = await Promise.all([
+        runCliEntrypoint([command, "--help", "--log-level", "info"], root),
+        runCliEntrypoint([command, "--help", "--log-level"], root),
+        runCliEntrypoint([command, "--help", "unexpected"], root),
+        runCliEntrypoint([command, "--help", "--unknown"], root),
+        runCliEntrypoint([command, "--version", "unexpected"], root),
+        runCliEntrypoint([command, "--version", "--unknown"], root),
+      ]);
 
-    for (const {
-      command,
-      compatibleHelp,
-      helpMissingValue,
-      helpPositional,
-      helpUnknown,
-      versionPositional,
-      versionUnknown,
-    } of results) {
       expect(compatibleHelp.exitCode).toBe(0);
       expect(compatibleHelp.stdout).toContain(`selftune ${command} [flags]`);
       expect(compatibleHelp.stderr).toBe("");
@@ -285,35 +252,31 @@ describe("Effect CLI read-only command family", () => {
         expect(malformed.stderr).toContain("Unknown option '--unknown'");
         expect(malformed.stderr).toContain(`selftune ${command} --help`);
       }
-    }
-  });
+    },
+  );
 
-  test("rejects attached help and version spellings before they can hide extra input", async () => {
-    const root = mkdtempSync(join(tmpdir(), "selftune-effect-read-only-attached-globals-"));
-    temporaryRoots.push(root);
+  test.each(READ_ONLY_COMMANDS)(
+    "rejects attached %s help and version spellings before they can hide extra input",
+    async (command) => {
+      const root = mkdtempSync(join(tmpdir(), "selftune-effect-read-only-attached-globals-"));
+      temporaryRoots.push(root);
 
-    const results = await Promise.all(
-      ["doctor", "status", "last", "quickstart"].map(async (command) => {
-        const [shortHelp, longHelp, version] = await Promise.all([
-          runCliEntrypoint([command, "-hfoo", "unexpected"], root),
-          runCliEntrypoint([command, "--help=true", "--unknown"], root),
-          runCliEntrypoint([command, "--version=false", "unexpected"], root),
-        ]);
-        return { command, longHelp, shortHelp, version };
-      }),
-    );
+      const [shortHelp, longHelp, version] = await Promise.all([
+        runCliEntrypoint([command, "-hfoo", "unexpected"], root),
+        runCliEntrypoint([command, "--help=true", "--unknown"], root),
+        runCliEntrypoint([command, "--version=false", "unexpected"], root),
+      ]);
 
-    for (const { command, longHelp, shortHelp, version } of results) {
       for (const malformed of [shortHelp, longHelp, version]) {
         expect(malformed.exitCode).toBe(1);
         expect(malformed.stdout).toBe("");
         expect(malformed.stderr).toContain("Unknown option");
         expect(malformed.stderr).toContain(`selftune ${command} --help`);
       }
-    }
 
-    expect(existsSync(join(root, ".selftune"))).toBe(false);
-  });
+      expect(existsSync(join(root, ".selftune"))).toBe(false);
+    },
+  );
 
   test("runs telemetry status, enable, disable, and help through the hybrid entrypoint", async () => {
     const root = mkdtempSync(join(tmpdir(), "selftune-effect-telemetry-"));

@@ -118,7 +118,9 @@ function configuredUser(
   };
 }
 
-const decodeConfiguredUsers = Schema.decodeUnknownEffect(ConfiguredUsersInput);
+const decodeConfiguredUsers = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(ConfiguredUsersInput),
+);
 
 export const loadSelfHostConfig = Effect.fn("SelfHostConfig.load")(function* (
   environment: NodeJS.ProcessEnv = process.env,
@@ -130,15 +132,13 @@ export const loadSelfHostConfig = Effect.fn("SelfHostConfig.load")(function* (
     );
   }
 
-  const parsedUsers = yield* Effect.try({
-    try: (): unknown => JSON.parse(environment.SELFTUNE_SELFHOST_USERS_JSON ?? "[]"),
-    catch: () => configFailure("SELFTUNE_SELFHOST_USERS_JSON must be valid JSON."),
-  }).pipe(
-    Effect.flatMap(decodeConfiguredUsers),
-    Effect.mapError((error) =>
-      error instanceof SelfHostConfigFailure
-        ? error
-        : configFailure(`SELFTUNE_SELFHOST_USERS_JSON is invalid: ${error.message}`),
+  const parsedUsers = yield* decodeConfiguredUsers(
+    environment.SELFTUNE_SELFHOST_USERS_JSON ?? "[]",
+  ).pipe(
+    Effect.mapError(() =>
+      configFailure(
+        "SELFTUNE_SELFHOST_USERS_JSON must be valid JSON containing configured accounts.",
+      ),
     ),
   );
 

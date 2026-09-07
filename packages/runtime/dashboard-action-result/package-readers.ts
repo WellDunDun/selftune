@@ -1,3 +1,6 @@
+import { flow, Option, Schema } from "effect";
+import { CliJsonOutput } from "../utils/json-output.js";
+import { CreatePackageCandidateAcceptanceDecision } from "../types/evaluation.js";
 import type {
   CreatePackageBodySummary,
   CreatePackageEvaluationEfficiencySummary,
@@ -10,23 +13,27 @@ import type {
   RuntimeReplayAggregateMetrics,
 } from "../types.js";
 
-export function readBoolean(value: unknown): boolean | null {
-  return typeof value === "boolean" ? value : null;
+export function readBoolean(value: typeof Schema.Json.Type | undefined): boolean | null {
+  return Schema.is(Schema.Boolean)(value) ? value : null;
 }
 
-export function readNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+export function readNumber(value: typeof Schema.Json.Type | undefined): number | null {
+  return Schema.is(Schema.Number)(value) && Number.isFinite(value) ? value : null;
 }
 
-export function readString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value : null;
+export function readString(value: typeof Schema.Json.Type | undefined): string | null {
+  return Schema.is(Schema.String)(value) && value.trim().length > 0 ? value : null;
 }
 
-export function readObject(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
-}
+export const readObject = flow(Schema.decodeUnknownOption(CliJsonOutput), Option.getOrNull);
+export const readCandidateAcceptanceDecision = flow(
+  Schema.decodeUnknownOption(CreatePackageCandidateAcceptanceDecision),
+  Option.getOrNull,
+);
 
-export function readEvidenceSample(value: unknown): CreatePackageEvaluationEvidenceSample | null {
+export function readEvidenceSample(
+  value: typeof Schema.Json.Type | undefined,
+): CreatePackageEvaluationEvidenceSample | null {
   const sample = readObject(value);
   const query = readString(sample?.["query"]);
   if (!query) return null;
@@ -37,15 +44,17 @@ export function readEvidenceSample(value: unknown): CreatePackageEvaluationEvide
   };
 }
 
-export function readEvidenceSamples(value: unknown): CreatePackageEvaluationEvidenceSample[] {
-  if (!Array.isArray(value)) return [];
+export function readEvidenceSamples(
+  value: typeof Schema.Json.Type | undefined,
+): CreatePackageEvaluationEvidenceSample[] {
+  if (!Schema.is(Schema.Array(Schema.Json))(value)) return [];
   return value
     .map((sample) => readEvidenceSample(sample))
     .filter((sample): sample is CreatePackageEvaluationEvidenceSample => sample != null);
 }
 
 export function readRuntimeReplayAggregateMetrics(
-  value: unknown,
+  value: typeof Schema.Json.Type | undefined,
 ): RuntimeReplayAggregateMetrics | null {
   const metrics = readObject(value);
   if (!metrics) return null;
@@ -78,7 +87,7 @@ export function readRuntimeReplayAggregateMetrics(
 }
 
 export function readPackageEvidenceSummary(
-  value: unknown,
+  value: typeof Schema.Json.Type | undefined,
 ): CreatePackageEvaluationEvidenceSummary | null {
   const summary = readObject(value);
   if (!summary) return null;
@@ -112,7 +121,7 @@ export function readPackageEvidenceSummary(
 }
 
 export function readPackageEfficiencySummary(
-  value: unknown,
+  value: typeof Schema.Json.Type | undefined,
 ): CreatePackageEvaluationEfficiencySummary | null {
   const summary = readObject(value);
   if (!summary) return null;
@@ -127,7 +136,9 @@ export function readPackageEfficiencySummary(
   };
 }
 
-export function readPackageEvaluationSource(value: unknown): CreatePackageEvaluationSource | null {
+export function readPackageEvaluationSource(
+  value: typeof Schema.Json.Type | undefined,
+): CreatePackageEvaluationSource | null {
   const source = readString(value);
   if (source !== "fresh" && source !== "artifact_cache" && source !== "candidate_cache") {
     return null;
@@ -135,7 +146,9 @@ export function readPackageEvaluationSource(value: unknown): CreatePackageEvalua
   return source;
 }
 
-export function readPackageReplaySummary(value: unknown): CreatePackageReplaySummary | null {
+export function readPackageReplaySummary(
+  value: typeof Schema.Json.Type | undefined,
+): CreatePackageReplaySummary | null {
   const summary = readObject(value);
   if (!summary) return null;
 
@@ -174,11 +187,13 @@ export function readPackageReplaySummary(value: unknown): CreatePackageReplaySum
     passed,
     failed,
     pass_rate: passRate,
-    ...(runtimeMetrics ? { runtime_metrics: runtimeMetrics } : {}),
+    runtime_metrics: runtimeMetrics ?? undefined,
   };
 }
 
-export function readPackageBodySummary(value: unknown): CreatePackageBodySummary | null {
+export function readPackageBodySummary(
+  value: typeof Schema.Json.Type | undefined,
+): CreatePackageBodySummary | null {
   const summary = readObject(value);
   if (!summary) return null;
 
@@ -207,7 +222,7 @@ export function readPackageBodySummary(value: unknown): CreatePackageBodySummary
 }
 
 export function readPackageGradingSummary(
-  value: unknown,
+  value: typeof Schema.Json.Type | undefined,
 ): CreatePackageEvaluationGradingSummary | null {
   const summary = readObject(value);
   if (!summary) return null;
@@ -252,7 +267,7 @@ export function readPackageGradingSummary(
 }
 
 export function readPackageUnitTestSummary(
-  value: unknown,
+  value: typeof Schema.Json.Type | undefined,
 ): CreatePackageEvaluationUnitTestSummary | null {
   const summary = readObject(value);
   if (!summary) return null;
@@ -266,17 +281,19 @@ export function readPackageUnitTestSummary(
     return null;
   }
 
-  const failingTests = Array.isArray(summary["failing_tests"])
+  const failingTests = Schema.is(Schema.Array(Schema.Json))(summary["failing_tests"])
     ? summary["failing_tests"]
         .map((entry) => {
           const failure = readObject(entry);
           const testId = readString(failure?.["test_id"]);
           if (!testId) return null;
 
-          const failedAssertions = Array.isArray(failure?.["failed_assertions"])
+          const failedAssertions = Schema.is(Schema.Array(Schema.Json))(
+            failure?.["failed_assertions"],
+          )
             ? failure["failed_assertions"].filter(
                 (assertion): assertion is string =>
-                  typeof assertion === "string" && assertion.trim().length > 0,
+                  Schema.is(Schema.String)(assertion) && assertion.trim().length > 0,
               )
             : [];
 

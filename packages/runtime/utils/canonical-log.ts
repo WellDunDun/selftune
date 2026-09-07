@@ -1,10 +1,10 @@
+import { decodeCanonicalLogLine } from "./log-contracts.js";
 import { existsSync } from "node:fs";
 
 import {
   type CanonicalPlatform,
-  type CanonicalRecord,
+  type CanonicalRecordEvidence,
   type CanonicalRecordKind,
-  isCanonicalRecord,
 } from "@selftune/telemetry-contract";
 
 import { CANONICAL_LOG } from "../constants.js";
@@ -15,15 +15,15 @@ export interface CanonicalRecordFilter {
   record_kind?: CanonicalRecordKind;
 }
 
-export function readCanonicalRecords(logPath: string = CANONICAL_LOG): CanonicalRecord[] {
+export function readCanonicalRecords(logPath: string = CANONICAL_LOG): CanonicalRecordEvidence[] {
   if (!existsSync(logPath)) return [];
-  return readJsonl<CanonicalRecord>(logPath).filter(isCanonicalRecord);
+  return readJsonl(logPath, decodeCanonicalLogLine);
 }
 
 export function filterCanonicalRecords(
-  records: CanonicalRecord[],
+  records: CanonicalRecordEvidence[],
   filter: CanonicalRecordFilter,
-): CanonicalRecord[] {
+): CanonicalRecordEvidence[] {
   return records.filter((record) => {
     if (filter.platform && record.platform !== filter.platform) return false;
     if (filter.record_kind && record.record_kind !== filter.record_kind) return false;
@@ -31,7 +31,10 @@ export function filterCanonicalRecords(
   });
 }
 
-export function serializeCanonicalRecords(records: CanonicalRecord[], pretty = false): string {
+export function serializeCanonicalRecords(
+  records: CanonicalRecordEvidence[],
+  pretty = false,
+): string {
   if (pretty) return `${JSON.stringify(records, null, 2)}\n`;
   return (
     records.map((record) => JSON.stringify(record)).join("\n") + (records.length > 0 ? "\n" : "")

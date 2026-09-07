@@ -10,10 +10,7 @@ export function assertSafeRelativePath(path: string): void {
   }
 }
 
-export function artifactPackageIdentity(artifact: RemoteArtifact): {
-  skillName: string;
-  revisionHash: string;
-} {
+export function artifactPackageIdentity(artifact: RemoteArtifact) {
   const parts = artifact.artifactId.split("/");
   const skillName = parts.at(-2) ?? "";
   const revisionHash = artifact.revisionHash ?? parts.at(-1) ?? "";

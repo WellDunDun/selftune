@@ -22,6 +22,8 @@ if (packagedDuckDbModule && !process.env.SELFTUNE_DESKTOP_RESOURCE_DIR) {
 const duckDbModule = packagedDuckDbModule
   ? await import(pathToFileURL(packagedDuckDbModule.modulePath).href)
   : await import(["@duckdb", "node-api"].join("/"));
+// SAFETY: Both resolution branches load the pinned @duckdb/node-api package entrypoint; the
+// packaged branch changes only its filesystem location so Desktop can load the native binary.
 const { DuckDBInstance, DuckDBTimestampValue } = duckDbModule as typeof import("@duckdb/node-api");
 
 /** Bounded desktop analytical-store memory; DuckDB never receives an unlimited process budget. */
@@ -38,7 +40,7 @@ export interface DuckDbWalRecoveryDependencies<A> {
   readonly mkdir: (
     path: string,
     options: { readonly mode: number; readonly recursive: boolean },
-  ) => Promise<unknown>;
+  ) => Promise<string | undefined>;
   readonly now: () => Date;
   readonly open: (databasePath: string) => Promise<A>;
   readonly randomUuid: () => string;
@@ -63,6 +65,7 @@ function isKnownWalReplayIndexFailure(cause: unknown): boolean {
 }
 
 function hasErrorCode(cause: unknown, code: string): boolean {
+  // SAFETY-TYPEOF: Recovery accepts native or injected I/O failures; only an exact code match authorizes recovery.
   return typeof cause === "object" && cause !== null && "code" in cause && cause.code === code;
 }
 
@@ -150,6 +153,8 @@ function appendScalar(
   appender: import("@duckdb/node-api").DuckDBAppender,
   value: DuckDbAppendValue,
 ) {
+  // SAFETY-TYPEOF: DuckDbAppendValue is a closed domain union whose primitive members select the
+  // corresponding native typed-appender method; the remaining tagged member is a timestamp.
   if (value === null) {
     appender.appendNull();
   } else if (typeof value === "number") {

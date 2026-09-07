@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import {
   buildCanonicalRecordsFromReplay,
+  cliMain,
   extractAllUserQueries,
   findTranscriptFiles,
   parseSession,
@@ -450,13 +451,13 @@ describe("writeSession", () => {
     const canonicalRecords = buildCanonicalRecordsFromReplay(session);
     const promptRecords = canonicalRecords.filter((r) => r.record_kind === "prompt");
     expect(promptRecords).toHaveLength(2);
-    expect((promptRecords[0] as Record<string, unknown>).prompt_text).toBe("first question");
-    expect((promptRecords[1] as Record<string, unknown>).prompt_text).toBe("second question");
+    expect(promptRecords[0]?.prompt_text).toBe("first question");
+    expect(promptRecords[1]?.prompt_text).toBe("second question");
 
     const invocation = canonicalRecords.find((r) => r.record_kind === "skill_invocation");
-    expect(invocation).not.toBeNull();
-    expect((invocation as Record<string, unknown>).matched_prompt_id).toBe("sess-write-test:p1");
-    expect((invocation as Record<string, unknown>).skill_name).toBe("MySkill");
+    expect(invocation).toBeDefined();
+    expect(invocation?.matched_prompt_id).toBe("sess-write-test:p1");
+    expect(invocation?.skill_name).toBe("MySkill");
   });
 
   test("skips polluted skill rows when last_user_query is not actionable", () => {
@@ -495,10 +496,9 @@ describe("writeSession", () => {
     const canonicalRecords = buildCanonicalRecordsFromReplay(session);
     const prompt = canonicalRecords.find((r) => r.record_kind === "prompt");
     const invocation = canonicalRecords.find((r) => r.record_kind === "skill_invocation");
-    expect((prompt as Record<string, unknown>)?.prompt_text).toBe("review the reins repo");
-    expect((invocation as Record<string, unknown>)?.matched_prompt_id).toBe(
-      (prompt as Record<string, unknown>)?.prompt_id,
-    );
+    expect(prompt?.prompt_text).toBe("review the reins repo");
+    expect(invocation).toBeDefined();
+    expect(invocation?.matched_prompt_id).toBe(prompt?.prompt_id);
   });
 
   test("dry-run produces no files", () => {
@@ -568,7 +568,23 @@ describe("writeSession", () => {
     const canonicalRecords = buildCanonicalRecordsFromReplay(session);
     const invocations = canonicalRecords.filter((r) => r.record_kind === "skill_invocation");
     expect(invocations).toHaveLength(2);
-    expect((invocations[0] as Record<string, unknown>).skill_name).toBe("SkillA");
-    expect((invocations[1] as Record<string, unknown>).skill_name).toBe("SkillB");
+    expect(invocations[0]?.skill_name).toBe("SkillA");
+    expect(invocations[1]?.skill_name).toBe("SkillB");
+  });
+});
+
+describe("Claude replay CLI validation", () => {
+  test.each([
+    { args: ["--since", "not-a-date"], message: "Invalid --since date" },
+    { args: ["--since"], message: "argument missing" },
+    { args: ["--unsupported-option"], message: "Unknown option" },
+  ])("rejects invalid arguments before reading transcripts: %j", ({ args, message }) => {
+    const originalArgv = process.argv;
+    process.argv = ["bun", "claude-replay.ts", ...args];
+    try {
+      expect(() => cliMain()).toThrow(message);
+    } finally {
+      process.argv = originalArgv;
+    }
   });
 });

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { types as utilTypes } from "node:util";
 
 import * as Sentry from "@sentry/electron/main";
 import { app, crashReporter, dialog, shell } from "electron";
@@ -10,9 +11,9 @@ import log from "electron-log/main.js";
 declare const __SELFTUNE_SENTRY_DSN__: string;
 
 const sentryDsn =
-  typeof __SELFTUNE_SENTRY_DSN__ === "string"
-    ? __SELFTUNE_SENTRY_DSN__
-    : (process.env.SELFTUNE_DESKTOP_SENTRY_DSN ?? "");
+  typeof __SELFTUNE_SENTRY_DSN__ === "undefined"
+    ? (process.env.SELFTUNE_DESKTOP_SENTRY_DSN ?? "")
+    : __SELFTUNE_SENTRY_DSN__;
 const doNotTrack =
   process.env.DO_NOT_TRACK === "1" || process.env.DO_NOT_TRACK?.toLowerCase() === "true";
 export function hasExplicitNativeCrashConsent(value: string | undefined): boolean {
@@ -20,6 +21,7 @@ export function hasExplicitNativeCrashConsent(value: string | undefined): boolea
 }
 
 export function isUnavailableLogStream(cause: unknown): boolean {
+  // SAFETY-TYPEOF: Console transport failures may be Error instances or error-like objects; only EIO/EPIPE are ignored.
   return (
     typeof cause === "object" &&
     cause !== null &&
@@ -34,7 +36,7 @@ interface ConsoleTransportGuard<TInput> {
 }
 
 interface LogErrorStream {
-  on(event: "error", listener: (cause: Error) => void): unknown;
+  on(event: "error", listener: (cause: Error) => void): void;
 }
 
 function rethrowUnexpectedLogStreamError(cause: Error): void {
@@ -212,13 +214,37 @@ export function scrubDiagnosticText(value: string, sensitivePaths: readonly stri
   return scrubbed;
 }
 
+type ScrubbedDiagnosticValue =
+  | bigint
+  | boolean
+  | CallableFunction
+  | null
+  | number
+  | string
+  | symbol
+  | undefined
+  | ScrubbedDiagnosticValue[]
+  | { [key: string]: ScrubbedDiagnosticValue };
+
+// SAFETY-UNKNOWN: This is the central privacy boundary for arbitrary runtime and Sentry diagnostic values; every traversable value is scrubbed before export.
 function scrubValue(
   value: unknown,
   sensitivePaths: readonly string[],
   seen: WeakSet<object>,
-): unknown {
+): ScrubbedDiagnosticValue {
+  // SAFETY-TYPEOF: Diagnostics accept arbitrary runtime and Sentry values, so the privacy scrubber must distinguish primitives before traversing objects.
   if (typeof value === "string") return scrubDiagnosticText(value, sensitivePaths);
-  if (value === null || typeof value !== "object") return value;
+  // SAFETY-TYPEOF: Functions are already handled as opaque, non-enumerated diagnostic values and must retain their runtime identity.
+  if (typeof value === "function") return value;
+  if (value === null || value === undefined) return value;
+  // SAFETY-TYPEOF: Numeric primitives are already safe scalar diagnostic values.
+  if (typeof value === "number") return value;
+  // SAFETY-TYPEOF: Boolean primitives are already safe scalar diagnostic values.
+  if (typeof value === "boolean") return value;
+  // SAFETY-TYPEOF: BigInt primitives are already safe scalar diagnostic values.
+  if (typeof value === "bigint") return value;
+  // SAFETY-TYPEOF: Symbol primitives are opaque scalar diagnostic values and have no traversable secret fields.
+  if (typeof value === "symbol") return value;
   if (seen.has(value)) return "[CIRCULAR]";
   seen.add(value);
 
@@ -226,7 +252,17 @@ function scrubValue(
     return value.map((entry) => scrubValue(entry, sensitivePaths, seen));
   }
 
-  const scrubbed: Record<string, unknown> = {};
+  const scrubbed: { [key: string]: ScrubbedDiagnosticValue } = {};
+  if (utilTypes.isNativeError(value)) {
+    scrubbed.name = scrubDiagnosticText(value.name, sensitivePaths);
+    scrubbed.message = scrubDiagnosticText(value.message, sensitivePaths);
+    if (value.stack !== undefined) {
+      scrubbed.stack = scrubDiagnosticText(value.stack, sensitivePaths);
+    }
+    if (value.cause !== undefined) {
+      scrubbed.cause = scrubValue(value.cause, sensitivePaths, seen);
+    }
+  }
   for (const [key, entry] of Object.entries(value)) {
     scrubbed[key] = isLikelySecretKey(key)
       ? REDACTED_SECRET
@@ -235,10 +271,11 @@ function scrubValue(
   return scrubbed;
 }
 
+// SAFETY-UNKNOWN: Callers send heterogeneous diagnostic payloads here specifically to cross the scrubber boundary before external reporting.
 export function scrubDiagnosticValue(
   value: unknown,
   sensitivePaths: readonly string[] = [],
-): unknown {
+): ScrubbedDiagnosticValue {
   return scrubValue(value, sensitivePaths, new WeakSet());
 }
 
@@ -327,7 +364,7 @@ function exportStamp(): string {
     .replace(/\.\d+Z$/, "Z");
 }
 
-export function buildDiagnosticsManifest(): Record<string, unknown> {
+export function buildDiagnosticsManifest() {
   return {
     generated_at: new Date().toISOString(),
     run_id: diagnosticsRunId,
@@ -346,6 +383,7 @@ export function buildDiagnosticsManifest(): Record<string, unknown> {
   };
 }
 
+// SAFETY-UNKNOWN: electron-log owns an intentionally heterogeneous structured-details boundary and performs its own serialization.
 export function logRuntimeEvent(
   level: "error" | "info" | "warn",
   message: string,
@@ -397,6 +435,7 @@ export function initializeDiagnostics(): void {
   log.errorHandler.startCatching({ showDialog: false });
 }
 
+// SAFETY-UNKNOWN: Failure causes are heterogeneous until this reporting boundary scrubs them for Sentry.
 export function reportRuntimeFailure(message: string, details?: unknown): void {
   log.error(message, details);
   if (errorReportingEnabled) {

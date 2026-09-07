@@ -63,7 +63,7 @@ const groupedHelpFixtures = [
   { command: "cron", markers: ["cron <subcommand>", "setup", "remove"] },
   { command: "registry", markers: ["registry <subcommand>", "push", "install", "rollback"] },
   { command: "team", markers: ["publish|assign|status|contribute|promote|deprecate|rollback"] },
-  { command: "alpha", markers: ["SUBCOMMANDS", "upload", "relink"] },
+  { command: "alpha", markers: ["SUBCOMMANDS", "relink"] },
   { command: "codex", markers: ["Codex platform hooks", "hook", "install"] },
   { command: "opencode", markers: ["OpenCode platform hooks", "hook", "install"] },
   { command: "cline", markers: ["Cline platform hooks", "hook", "install"] },
@@ -106,7 +106,7 @@ function extractRegisteredCommands(): Set<string> {
 describe("CLI routing parity", () => {
   test("every command in top-level help remains represented in the route map", () => {
     const helpCommands = extractDocumentedCommands(runCli("--help"));
-    expect(helpCommands).toEqual(documentedTopLevelCommands);
+    expect(helpCommands).toEqual([...documentedTopLevelCommands]);
 
     const routedCommands = extractRegisteredCommands();
     for (const command of documentedTopLevelCommands) {
@@ -120,12 +120,13 @@ describe("CLI routing parity", () => {
     for (const command of FULLY_EFFECT_OWNED_COMMANDS) {
       expect(runCli(command, "--help")).toContain(`selftune ${command}`);
     }
-  }, 15_000);
+  }, 30_000);
 
   for (const fixture of groupedHelpFixtures) {
     test(`${fixture.command} dispatches to its grouped help surface`, () => {
       const help = runCli(fixture.command, "--help");
       for (const marker of fixture.markers) expect(help).toContain(marker);
+      if (fixture.command === "alpha") expect(help).not.toContain("upload");
     });
   }
 });

@@ -13,6 +13,8 @@
 
 import { existsSync, readFileSync } from "node:fs";
 
+import * as Schema from "effect/Schema";
+
 import type {
   SkillAssertion,
   SkillUnitTest,
@@ -20,15 +22,55 @@ import type {
   UnitTestSuiteResult,
 } from "../types.js";
 
+const AssertionSchema = Schema.Struct({
+  type: Schema.Literals([
+    "contains",
+    "not_contains",
+    "regex",
+    "json_path",
+    "tool_called",
+    "tool_not_called",
+  ]),
+  value: Schema.String,
+  description: Schema.optionalKey(Schema.String),
+});
+const AssertionsSchema = Schema.mutable(Schema.Array(AssertionSchema));
+const TagsSchema = Schema.optionalKey(Schema.mutable(Schema.Array(Schema.String)));
+const UnitTestSchema = Schema.Struct({
+  id: Schema.String,
+  skill_name: Schema.String,
+  query: Schema.String,
+  assertions: AssertionsSchema,
+  timeout_ms: Schema.optionalKey(Schema.Number),
+  tags: TagsSchema,
+});
+const PortableTestsSchema = Schema.Struct({
+  skill_name: Schema.String,
+  evals: Schema.Array(
+    Schema.Struct({
+      id: Schema.optionalKey(Schema.Union([Schema.String, Schema.Number])),
+      prompt: Schema.String,
+      selftune_assertions: Schema.optionalKey(AssertionsSchema),
+      tags: TagsSchema,
+    }),
+  ),
+});
+const decodeTestFile = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Union([Schema.mutable(Schema.Array(UnitTestSchema)), PortableTestsSchema]),
+  ),
+);
+const decodeTranscriptObject = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
+);
+type AssertionCheck = Pick<UnitTestResult["assertion_results"][number], "passed" | "actual">;
+
 // ---------------------------------------------------------------------------
 // Assertion checker (deterministic, no agent needed)
 // ---------------------------------------------------------------------------
 
 /** Check a single assertion against a transcript string. */
-export function checkAssertion(
-  assertion: SkillAssertion,
-  transcript: string,
-): { passed: boolean; actual?: string } {
+export function checkAssertion(assertion: SkillAssertion, transcript: string): AssertionCheck {
   switch (assertion.type) {
     case "contains":
       return {
@@ -72,16 +114,16 @@ export function checkAssertion(
       const key = assertion.value.slice(0, eqIdx);
       const expected = assertion.value.slice(eqIdx + 1);
       try {
-        const parsed = JSON.parse(transcript);
-        const actual = String(parsed[key] ?? "");
+        const parsed = decodeTranscriptObject(transcript);
+        const actual = String(Object.hasOwn(parsed, key) ? (parsed[key] ?? "") : "");
         return { passed: actual === expected, actual };
       } catch {
         // Try to find JSON in the transcript
         const jsonMatch = transcript.match(/\{[^}]+\}/);
         if (jsonMatch) {
           try {
-            const parsed = JSON.parse(jsonMatch[0]);
-            const actual = String(parsed[key] ?? "");
+            const parsed = decodeTranscriptObject(jsonMatch[0]);
+            const actual = String(Object.hasOwn(parsed, key) ? (parsed[key] ?? "") : "");
             return { passed: actual === expected, actual };
           } catch {
             return { passed: false, actual: "(json parse error)" };
@@ -108,38 +150,22 @@ export function loadUnitTests(testsPath: string): SkillUnitTest[] {
       return [];
     }
     const raw = readFileSync(testsPath, "utf-8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      "skill_name" in parsed &&
-      typeof parsed.skill_name === "string" &&
-      "evals" in parsed &&
-      Array.isArray(parsed.evals)
-    ) {
+    const parsed = decodeTestFile(raw);
+    if ("evals" in parsed) {
       const skillName = parsed.skill_name;
       return parsed.evals.flatMap((entry, index): SkillUnitTest[] => {
-        if (!entry || typeof entry !== "object") return [];
-        if (!("prompt" in entry) || typeof entry.prompt !== "string") return [];
-        if (!("selftune_assertions" in entry) || !Array.isArray(entry.selftune_assertions)) {
-          return [];
-        }
-        return [
-          {
-            id: "id" in entry ? String(entry.id) : `eval-${index + 1}`,
-            skill_name: skillName,
-            query: entry.prompt,
-            assertions: entry.selftune_assertions as SkillUnitTest["assertions"],
-            ...(Array.isArray(entry.tags) ? { tags: entry.tags as string[] } : {}),
-          },
-        ];
+        if (entry.selftune_assertions === undefined) return [];
+        const test: SkillUnitTest = {
+          id: entry.id === undefined ? `eval-${index + 1}` : String(entry.id),
+          skill_name: skillName,
+          query: entry.prompt,
+          assertions: entry.selftune_assertions,
+        };
+        if (entry.tags !== undefined) test.tags = entry.tags;
+        return [test];
       });
     }
-    if (!Array.isArray(parsed)) {
-      console.warn(`[WARN] Unit test file is not an array: ${testsPath}`);
-      return [];
-    }
-    return parsed as SkillUnitTest[];
+    return parsed;
   } catch (err) {
     console.warn(`[WARN] Failed to load unit tests from ${testsPath}:`, err);
     return [];

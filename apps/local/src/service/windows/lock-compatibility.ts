@@ -6,7 +6,10 @@ import { Database } from "bun:sqlite";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
 
 const LEGACY_LOCK_FILENAME = "windows-service-mutation.lock";
 const SQLITE_LOCK_FILENAME = "windows-service-mutation.sqlite";
@@ -176,6 +179,11 @@ export class WindowsServiceLockCompatibilityError extends Schema.TaggedErrorClas
   { message: Schema.String, operation: Schema.String },
 ) {}
 
+export class WindowsServiceLockFileError extends Schema.TaggedErrorClass<WindowsServiceLockFileError>()(
+  "WindowsServiceLockFileError",
+  { message: Schema.String, code: Schema.NullOr(Schema.String), cause: Schema.Defect },
+) {}
+
 export interface WindowsServiceLockCompatibility {
   readonly diagnose: (
     scope: WindowsUserServiceMutationLockScope,
@@ -192,16 +200,11 @@ export interface WindowsServiceLockCompatibility {
   ) => Effect.Effect<void, WindowsServiceLockCompatibilityError>;
 }
 
-const LEGACY_KEYS: ReadonlyArray<string> = [
-  "controlDir",
-  "namespace",
-  "pid",
-  "startedAt",
-  "token",
-  "userSid",
-  "version",
-];
-const FENCE_KEYS: ReadonlyArray<string> = ["controlDir", "kind", "namespace", "userSid", "version"];
+const decodeLockPayload = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Union([WindowsLegacyMutationLockPayloadModel, WindowsMutationLockFenceSchema]),
+  ),
+);
 
 function failure(operation: string, cause: unknown): WindowsServiceLockCompatibilityError {
   return WindowsServiceLockCompatibilityError.make({
@@ -217,39 +220,18 @@ function mapFailure<A, E, R>(
   return effect.pipe(Effect.mapError((cause) => failure(operation, cause)));
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function hasExactKeys(value: unknown, expected: ReadonlyArray<string>): boolean {
-  if (!isRecord(value)) return false;
-  const actual = Object.keys(value).toSorted();
-  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
-}
-
 function nodeErrorCode(cause: unknown): string | null {
-  return cause instanceof Error && "code" in cause && typeof cause.code === "string"
-    ? cause.code
+  return cause instanceof Error && "code" in cause
+    ? Option.getOrNull(Schema.decodeUnknownOption(Schema.String)(cause.code))
     : null;
 }
 
 function parsePayload(
   raw: string,
 ): WindowsLegacyMutationLockPayloadModel | WindowsMutationLockFence | null {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed)) return null;
-    if (parsed.version === 2 && hasExactKeys(parsed, LEGACY_KEYS)) {
-      return Schema.decodeUnknownSync(WindowsLegacyMutationLockPayloadModel)(parsed);
-    }
-    if (parsed.version === 3 && hasExactKeys(parsed, FENCE_KEYS)) {
-      const fence = Schema.decodeUnknownSync(WindowsMutationLockFenceSchema)(parsed);
-      return serializeWindowsMutationLockFence(fence) === raw ? fence : null;
-    }
-    return null;
-  } catch {
-    return null;
-  }
+  const payload = Option.getOrNull(decodeLockPayload(raw, { onExcessProperty: "error" }));
+  if (payload === null || payload.version === 2) return payload;
+  return serializeWindowsMutationLockFence(payload) === raw ? payload : null;
 }
 
 function generation(raw: string): string {
@@ -545,8 +527,18 @@ export function makeWindowsServiceLockCompatibility(
   return { diagnose, ensureFence, repairStale };
 }
 
-function promiseEffect<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
-  return Effect.tryPromise({ try: operation, catch: (cause) => cause });
+function promiseEffect<A>(
+  operation: () => Promise<A>,
+): Effect.Effect<A, WindowsServiceLockFileError> {
+  return Effect.tryPromise({
+    try: operation,
+    catch: (cause) =>
+      new WindowsServiceLockFileError({
+        message: cause instanceof Error ? cause.message : String(cause),
+        code: nodeErrorCode(cause),
+        cause,
+      }),
+  });
 }
 
 function makeLiveFileSystem(): WindowsServiceLockCompatibilityFileSystem {
@@ -600,6 +592,15 @@ function makeLiveFileSystem(): WindowsServiceLockCompatibilityFileSystem {
       ),
   };
 }
+
+export class WindowsLockCompatibility extends Context.Service<
+  WindowsLockCompatibility,
+  WindowsServiceLockCompatibility
+>()("SelfTune/WindowsLockCompatibility") {}
+
+export const WindowsLockCompatibilityLive = Layer.sync(WindowsLockCompatibility)(() =>
+  makeLiveWindowsServiceLockCompatibility(),
+);
 
 export function makeLiveWindowsServiceLockCompatibility(): WindowsServiceLockCompatibility {
   return makeWindowsServiceLockCompatibility({

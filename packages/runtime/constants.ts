@@ -94,7 +94,7 @@ export const GENERIC_NEGATIVES = [
 ] as const;
 
 /** Required fields per log type (for schema validation). */
-export const REQUIRED_FIELDS: Record<string, Set<string>> = {
+export const REQUIRED_FIELDS = {
   session_telemetry: new Set(["timestamp", "session_id", "source"]),
   skill_usage: new Set(["timestamp", "session_id", "skill_name"]),
   all_queries: new Set(["timestamp", "session_id", "query"]),

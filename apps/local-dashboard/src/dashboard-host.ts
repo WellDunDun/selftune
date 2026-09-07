@@ -81,7 +81,6 @@ import {
   usePrepareTraceCandidate,
   useUpdateSkillClassification,
 } from "./hooks/useSkillIntelligence";
-import { fetchTraceCandidateTargets, submitTraceCandidateTarget } from "./api";
 import {
   useSettings,
   useUpdateWorkspaceSkillSetPolicy,
@@ -429,6 +428,27 @@ function useLocalLibraryActions(): DashboardLibraryActions {
         return {
           succeeded: result.receipts.length,
           failed: result.failures.length,
+        };
+      },
+    },
+    moveToLibraryMany: {
+      access: "available",
+      isPending: archiveSkills.isPending,
+      async execute(inputs) {
+        const result = await archiveSkills.mutateAsync(
+          inputs.map((input) => ({ ...input, keepSearchable: true })),
+        );
+        return {
+          succeeded: result.receipts.length,
+          failed: result.failures.length,
+          receipts: result.receipts.map((receipt) => ({
+            skillName: receipt.skill_name,
+            restoreId: receipt.quarantine_id,
+          })),
+          failures: result.failures.map((failure) => ({
+            skillName: failure.skill_name,
+            message: failure.message,
+          })),
         };
       },
     },
@@ -1005,39 +1025,6 @@ function useLocalProjectsActions(): DashboardProjectsActions {
               }
             : null,
         };
-      },
-    },
-    traceCandidateTargets: {
-      access: "available",
-      isPending: false,
-      async execute(draftId) {
-        const result = await fetchTraceCandidateTargets(draftId);
-        return {
-          runId: result.run_id,
-          blockers: result.blockers,
-          targets: result.targets.map((target) => ({
-            sourceId: target.source_id,
-            snapshotId: target.snapshot_id,
-            skillId: target.skill_id,
-            suiteId: target.suite_id,
-            suiteName: target.suite_name,
-            manifestDigest: target.manifest_digest,
-          })),
-        };
-      },
-    },
-    submitTraceCandidateTarget: {
-      access: "available",
-      isPending: false,
-      async execute(input) {
-        const receipt = await submitTraceCandidateTarget(input.draftId, {
-          source_id: input.sourceId,
-          snapshot_id: input.snapshotId,
-          skill_id: input.skillId,
-          suite_id: input.suiteId,
-          manifest_digest: input.manifestDigest,
-        });
-        return { runId: receipt.run_id };
       },
     },
   };

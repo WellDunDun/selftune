@@ -11,13 +11,17 @@ const INSTANT = { duration: 0 } as const;
 
 export type AsyncActionStatus = "idle" | "pending" | "success" | "error";
 
-export type UseAsyncActionOptions = {
-  action: () => unknown;
+export type UseAsyncActionOptions<Result = void> = {
+  action: () => Result | PromiseLike<Result>;
   resetAfter?: number;
-  onError?: (error: unknown) => void;
+  onError?: (cause: unknown) => void;
 };
 
-export function useAsyncAction({ action, resetAfter = 1400, onError }: UseAsyncActionOptions) {
+export function useAsyncAction<Result>({
+  action,
+  resetAfter = 1400,
+  onError,
+}: UseAsyncActionOptions<Result>) {
   const [status, setStatus] = useState<AsyncActionStatus>("idle");
 
   const phase = useRef<AsyncActionStatus>("idle");
@@ -71,8 +75,8 @@ export function useAsyncAction({ action, resetAfter = 1400, onError }: UseAsyncA
       .then(() => act.current())
       .then(
         () => settle("success"),
-        (error: unknown) => {
-          fail.current?.(error);
+        (cause: unknown) => {
+          fail.current?.(cause);
           settle("error");
         },
       );
@@ -154,19 +158,19 @@ function AlertMark() {
   );
 }
 
-export type LoadingButtonProps = {
-  onAction: () => unknown;
+export type LoadingButtonProps<Result = void> = {
+  onAction: () => Result | PromiseLike<Result>;
   children: string;
   pendingLabel?: string;
   successLabel?: string;
   errorLabel?: string;
   resetAfter?: number;
   disabled?: boolean;
-  onError?: (error: unknown) => void;
+  onError?: (cause: unknown) => void;
   className?: string;
 };
 
-export function LoadingButton({
+export function LoadingButton<Result>({
   onAction,
   children,
   pendingLabel = children,
@@ -176,7 +180,7 @@ export function LoadingButton({
   disabled = false,
   onError,
   className = "",
-}: LoadingButtonProps) {
+}: LoadingButtonProps<Result>) {
   const reduced = useReducedMotion();
 
   const { status, run, pending } = useAsyncAction({

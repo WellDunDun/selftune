@@ -327,7 +327,7 @@ describe("uninstall program", () => {
 
       expect(received).toBe(failure);
       expect(received._tag).toBe("UninstallCleanupFailure");
-      expect(events).toEqual(expectedEvents);
+      expect(events).toEqual([...expectedEvents]);
     });
   }
 });

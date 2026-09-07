@@ -10,7 +10,6 @@
  * explicit dry-run and review-required modes for human-in-the-loop operation.
  */
 
-import type { UploadCycleSummary } from "@selftune/runtime/alpha-upload/index";
 import type { EvolveOptions, EvolveResult } from "@selftune/runtime/evolution/evolve";
 import { readGradingResultsForSkill } from "@selftune/runtime/grading/results";
 import { getDb } from "@selftune/local-store";
@@ -122,7 +121,6 @@ export interface OrchestrateResult {
   statusResult: StatusResult;
   candidates: SkillAction[];
   workflowProposals: WorkflowSkillProposal[];
-  uploadSummary?: UploadCycleSummary;
   contributionRelaySummary?: { attempted: number; sent: number; failed: number };
   summary: {
     totalSkills: number;

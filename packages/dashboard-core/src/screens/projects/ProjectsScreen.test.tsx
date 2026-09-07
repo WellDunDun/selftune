@@ -497,7 +497,7 @@ describe("shared Projects screen", () => {
   });
 
   it("keeps detected project capture in its focused project surface", () => {
-    const candidate = inventory.captureCandidates[0];
+    const candidate = inventory.captureCandidates?.[0];
     if (!candidate) throw new Error("Expected a capture candidate fixture.");
     const html = renderToStaticMarkup(
       <ProjectCaptureCandidates
@@ -724,16 +724,9 @@ describe("shared Projects screen", () => {
   it("presents conflict review and host-owned resolution before apply", () => {
     const resolveConflict = {
       access: "available",
-      execute: async () => ({
-        skillSetId: "software-development",
-        skillSetName: "Software Development",
-        projectRoot: "/projects/app",
-        creates: 1,
-        unchanged: 0,
-        conflicts: 0,
-        missingDependencies: 0,
-        operations: [],
-      }),
+      execute: async () => {
+        throw new Error("Server rendering must not execute conflict resolution.");
+      },
     } as const;
     const html = renderToStaticMarkup(
       <PlanReview

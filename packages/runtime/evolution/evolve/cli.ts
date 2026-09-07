@@ -10,12 +10,40 @@ import { getDb } from "../../localdb/db.js";
 import { querySessionTelemetry, querySkillUsageRecords } from "../../localdb/queries.js";
 import type { EvolveResultSummary, SessionTelemetryRecord } from "../../types.js";
 import { CLIError } from "../../utils/cli-error.js";
-import type { EffortLevel } from "../../utils/llm-call.js";
 import type { ReplayValidationOptions } from "../engines/replay-engine.js";
 import { buildRuntimeReplayValidationOptions } from "../validate-host-replay.js";
-import { DEFAULT_VALIDATION_STRATEGY, type ValidationStrategy } from "../validation-contract.js";
 import { buildUnblockSuggestions } from "../unblock-suggestions.js";
+import type { EvolveResult } from "./contracts.js";
 import { evolve } from "./orchestrator.js";
+
+export function summarizeEvolution(result: EvolveResult, skill: string): EvolveResultSummary {
+  const summary: EvolveResultSummary = {
+    skill,
+    deployed: result.deployed,
+    reason: result.reason,
+    before: result.validation?.before_pass_rate ?? 0,
+    after: result.validation?.after_pass_rate ?? 0,
+    net_change: result.validation?.net_change ?? 0,
+    improved: result.validation?.improved ?? false,
+    regressions: result.validation?.regressions.length ?? 0,
+    new_passes: result.validation?.new_passes.length ?? 0,
+    confidence: result.proposal?.confidence ?? 0,
+    llm_calls: result.llmCallCount,
+    elapsed_s: +(result.elapsedMs / 1000).toFixed(1),
+    proposal_id: result.proposal?.proposal_id ?? "",
+    rationale: result.proposal?.rationale ?? "",
+    dashboard_url: `http://localhost:3141/report/${encodeURIComponent(skill)}`,
+  };
+  if (result.skillVersion) summary.version = result.skillVersion;
+  if (result.descriptionQualityBefore != null) {
+    summary.description_quality_before = result.descriptionQualityBefore;
+  }
+  if (result.descriptionQualityAfter != null) {
+    summary.description_quality_after = result.descriptionQualityAfter;
+  }
+  if (!result.deployed) summary.suggestions = buildUnblockSuggestions(result, skill);
+  return summary;
+}
 
 export async function cliMain(sourceSync?: SourceSyncRunner): Promise<void> {
   const { values } = parseArgs({
@@ -59,10 +87,10 @@ export async function cliMain(sourceSync?: SourceSyncRunner): Promise<void> {
       "selftune evolve --skill <name> --skill-path <path>",
     );
   }
-  if (
-    values["validation-mode"] &&
-    !["auto", "replay", "judge"].includes(values["validation-mode"])
-  ) {
+  const validationMode = (["auto", "replay", "judge"] as const).find(
+    (mode) => mode === values["validation-mode"],
+  );
+  if (!validationMode) {
     throw new CLIError(
       `Invalid --validation-mode value: ${values["validation-mode"]}`,
       "INVALID_FLAG",
@@ -76,7 +104,10 @@ export async function cliMain(sourceSync?: SourceSyncRunner): Promise<void> {
       "Add --sync-first when using --sync-force",
     );
   }
-  if (values["gate-effort"] && !["low", "medium", "high", "max"].includes(values["gate-effort"])) {
+  const gateEffort = (["low", "medium", "high", "max"] as const).find(
+    (effort) => effort === values["gate-effort"],
+  );
+  if (values["gate-effort"] !== undefined && !gateEffort) {
     throw new CLIError(
       `Invalid --gate-effort value: ${values["gate-effort"]}`,
       "INVALID_FLAG",
@@ -159,7 +190,7 @@ export async function cliMain(sourceSync?: SourceSyncRunner): Promise<void> {
   let telemetryRecords: SessionTelemetryRecord[] | undefined;
   if (tokenEfficiencyEnabled && !(values["sync-first"] ?? false)) {
     const dbTel2 = getDb();
-    telemetryRecords = querySessionTelemetry(dbTel2) as SessionTelemetryRecord[];
+    telemetryRecords = querySessionTelemetry(dbTel2);
   }
   const gradingResults = readGradingResultsForSkill(values.skill);
 
@@ -206,14 +237,13 @@ export async function cliMain(sourceSync?: SourceSyncRunner): Promise<void> {
       validationModel: values["validation-model"],
       cheapLoop: (values["cheap-loop"] ?? true) && !(values["full-model"] ?? false),
       gateModel: values["gate-model"],
-      gateEffort: values["gate-effort"] as EffortLevel | undefined,
+      gateEffort,
       proposalModel: values["proposal-model"],
       adaptiveGate: values["adaptive-gate"] ?? false,
       gradingResults,
       syncFirst: values["sync-first"] ?? false,
       syncForce: values["sync-force"] ?? false,
-      validationMode:
-        (values["validation-mode"] as ValidationStrategy) ?? DEFAULT_VALIDATION_STRATEGY,
+      validationMode,
       replayOptions,
     },
     { syncSources: sourceSync },
@@ -222,35 +252,7 @@ export async function cliMain(sourceSync?: SourceSyncRunner): Promise<void> {
   if (values.verbose) {
     console.log(JSON.stringify(result, null, 2));
   } else {
-    const summary: EvolveResultSummary = {
-      skill: values.skill,
-      deployed: result.deployed,
-      reason: result.reason,
-      before: result.validation?.before_pass_rate ?? 0,
-      after: result.validation?.after_pass_rate ?? 0,
-      net_change: result.validation?.net_change ?? 0,
-      improved: result.validation?.improved ?? false,
-      regressions: result.validation?.regressions.length ?? 0,
-      new_passes: result.validation?.new_passes.length ?? 0,
-      confidence: result.proposal?.confidence ?? 0,
-      llm_calls: result.llmCallCount,
-      elapsed_s: +(result.elapsedMs / 1000).toFixed(1),
-      proposal_id: result.proposal?.proposal_id ?? "",
-      rationale: result.proposal?.rationale ?? "",
-      ...(result.skillVersion ? { version: result.skillVersion } : {}),
-      dashboard_url: `http://localhost:3141/report/${encodeURIComponent(values.skill)}`,
-      ...(result.descriptionQualityBefore != null
-        ? { description_quality_before: result.descriptionQualityBefore }
-        : {}),
-      ...(result.descriptionQualityAfter != null
-        ? { description_quality_after: result.descriptionQualityAfter }
-        : {}),
-      ...(!result.deployed
-        ? {
-            suggestions: buildUnblockSuggestions(result, values.skill),
-          }
-        : {}),
-    };
+    const summary = summarizeEvolution(result, values.skill);
     console.log(JSON.stringify(summary, null, 2));
   }
 

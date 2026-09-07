@@ -1,3 +1,5 @@
+import type { queries, session_telemetry, skill_usage } from "@selftune/local-store/schema";
+import type { Schema } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -31,7 +33,7 @@ function createSessionFile(
   dir: string,
   agentId: string,
   sessionId: string,
-  lines: object[],
+  lines: Array<typeof Schema.Json.Type>,
 ): string {
   const agentDir = join(dir, agentId, "sessions");
   mkdirSync(agentDir, { recursive: true });
@@ -41,6 +43,48 @@ function createSessionFile(
 }
 
 describe("parseOpenClawSession", () => {
+  test.each([{ header: null }, { header: [] }, { header: 7 }, { header: "header" }])(
+    "rejects an invalid JSON header without throwing: %j",
+    ({ header }) => {
+      const file = createSessionFile(tmpDir, "agent", "invalid", [header]);
+      expect(parseOpenClawSession(file, new Set()).session_id).toBe("");
+      expect(findOpenClawSessions(tmpDir, null)).toEqual([]);
+    },
+  );
+
+  test("keeps valid evidence beside malformed optional fields and content blocks", () => {
+    const file = createSessionFile(tmpDir, "agent", "mixed", [
+      { type: "session", id: "mixed", cwd: 5, sessionKey: { invalid: true } },
+      null,
+      [],
+      7,
+      {
+        role: "user",
+        content: [null, 4, { type: "text", text: 20 }, { type: "text", text: "Build an API" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "toolCall", name: "Bash", input: { command: 24, cmd: "npm test" } },
+          { type: "toolUse", name: "Read", input: { path: "/skills/RestAPI/SKILL.md" } },
+          { type: "text", text: false },
+        ],
+      },
+      { role: "toolResult", content: { is_error: true } },
+      { role: "user", content: "Then test it" },
+    ]);
+    const parsed = parseOpenClawSession(file, new Set(["RestAPI"]));
+    expect(parsed.session_id).toBe("mixed");
+    expect(parsed.cwd).toBe("");
+    expect(parsed.session_key).toBeUndefined();
+    expect(parsed.query).toBe("Build an API");
+    expect(parsed.last_user_query).toBe("Then test it");
+    expect(parsed.bash_commands).toEqual(["npm test"]);
+    expect(parsed.skills_triggered).toEqual(["RestAPI"]);
+    expect(parsed.total_tool_calls).toBe(2);
+    expect(parsed.errors_encountered).toBe(1);
+  });
+
   test("parses a session with header, user, and assistant messages", () => {
     const filePath = createSessionFile(tmpDir, "agent-1", "sess-abc", [
       {
@@ -444,24 +488,30 @@ describe("writeSession", () => {
     // Verify query written to SQLite
     const db = getDb();
     const queryRow = db
-      .query("SELECT query, source FROM queries WHERE session_id = ?")
-      .get("sess-oc-1") as { query: string; source: string } | null;
+      .query<Pick<typeof queries.$inferSelect, "query" | "source">, string[]>(
+        "SELECT query, source FROM queries WHERE session_id = ?",
+      )
+      .get("sess-oc-1");
     expect(queryRow).toBeTruthy();
     expect(queryRow?.query).toBe("Build an API");
     expect(queryRow?.source).toBe("openclaw");
 
     // Verify telemetry written to SQLite
     const telemetryRow = db
-      .query("SELECT session_id, source FROM session_telemetry WHERE session_id = ?")
-      .get("sess-oc-1") as { session_id: string; source: string } | null;
+      .query<Pick<typeof session_telemetry.$inferSelect, "session_id" | "source">, string[]>(
+        "SELECT session_id, source FROM session_telemetry WHERE session_id = ?",
+      )
+      .get("sess-oc-1");
     expect(telemetryRow).toBeTruthy();
     expect(telemetryRow?.session_id).toBe("sess-oc-1");
     expect(telemetryRow?.source).toBe("openclaw");
 
     // Verify skill usage written to SQLite
     const skillRow = db
-      .query("SELECT skill_name, skill_path FROM skill_usage WHERE session_id = ?")
-      .get("sess-oc-1") as { skill_name: string; skill_path: string } | null;
+      .query<Pick<typeof skill_usage.$inferSelect, "skill_name" | "skill_path">, string[]>(
+        "SELECT skill_name, skill_path FROM skill_usage WHERE session_id = ?",
+      )
+      .get("sess-oc-1");
     expect(skillRow).toBeTruthy();
     expect(skillRow?.skill_name).toBe("RestAPI");
     expect(skillRow?.skill_path).toBe("(openclaw:RestAPI)");
@@ -470,11 +520,11 @@ describe("writeSession", () => {
     const canonicalRecords = buildCanonicalRecordsFromOpenClaw(session);
     const canonicalSession = canonicalRecords.find((r) => r.record_kind === "session");
     expect(canonicalSession).toBeTruthy();
-    expect((canonicalSession as Record<string, unknown>).platform).toBe("openclaw");
-    expect((canonicalSession as Record<string, unknown>).capture_mode).toBe("batch_ingest");
+    expect(canonicalSession?.platform).toBe("openclaw");
+    expect(canonicalSession?.capture_mode).toBe("batch_ingest");
 
     const canonicalInvocation = canonicalRecords.find((r) => r.record_kind === "skill_invocation");
-    expect((canonicalInvocation as Record<string, unknown>)?.invocation_mode).toBe("inferred");
+    expect(canonicalInvocation?.invocation_mode).toBe("inferred");
   });
 
   test("dry run does not write files", () => {
@@ -535,13 +585,16 @@ describe("writeSession", () => {
 
     // Query should NOT be written to SQLite (query too short)
     const db = getDb();
-    const queryCount = (db.query("SELECT COUNT(*) as cnt FROM queries").get() as { cnt: number })
-      .cnt;
+    const queryCount = db
+      .query<{ cnt: number }, string[]>("SELECT COUNT(*) as cnt FROM queries")
+      .get()?.cnt;
     expect(queryCount).toBe(0);
     // But telemetry should still be written
     const telemetryRow = db
-      .query("SELECT session_id FROM session_telemetry WHERE session_id = ?")
-      .get("sess-short") as { session_id: string } | null;
+      .query<Pick<typeof session_telemetry.$inferSelect, "session_id">, string[]>(
+        "SELECT session_id FROM session_telemetry WHERE session_id = ?",
+      )
+      .get("sess-short");
     expect(telemetryRow).toBeTruthy();
     expect(telemetryRow?.session_id).toBe("sess-short");
   });

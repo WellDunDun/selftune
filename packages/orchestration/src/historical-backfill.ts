@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { Database } from "bun:sqlite";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import { acknowledgeAnalyticalImport, AnalyticalImportCheckpoint } from "@selftune/local-store";
@@ -21,13 +22,18 @@ const MAX_BATCH_SIZE = 256;
 const Domains = ["sessions", "prompts", "skill_invocations", "execution_facts"] as const;
 
 type SourceDomain = (typeof Domains)[number];
-type SqlValue = string | number | null | undefined;
+type SqlValue = string | number | null;
 type SqlRow = Readonly<Record<string, SqlValue>>;
 
 const CursorRow = Schema.Struct({
   source_fingerprint: Schema.String,
   normalizer_version: Schema.String,
 });
+const BoundaryRow = Schema.Struct({
+  source_fingerprint: Schema.String.check(Schema.isNonEmpty()),
+});
+const PageCursorRow = Schema.Struct({ cursor_key: Schema.Number });
+const MaximumKeyRow = Schema.Struct({ key: Schema.Number });
 
 export class HistoricalBackfillFailure extends Schema.TaggedErrorClass<HistoricalBackfillFailure>()(
   "HistoricalBackfillFailure",
@@ -103,9 +109,9 @@ const controlTransaction = Effect.fn("HistoricalBackfill.controlTransaction")(fu
   });
 });
 
-const optional = (value: SqlValue) => (value === null ? undefined : value);
+const optional = (value: SqlValue | undefined) => (value === null ? undefined : value);
 
-const omitUndefined = (row: Readonly<Record<string, SqlValue>>): SqlRow => {
+const omitUndefined = (row: Readonly<Record<string, SqlValue | undefined>>) => {
   const cleaned: Record<string, string | number | null> = {};
   for (const [key, value] of Object.entries(row)) {
     if (value !== undefined) cleaned[key] = value;
@@ -127,7 +133,8 @@ const uniqueSessions = (rows: ReadonlyArray<SqlRow>) => {
   const sessions = new Map<string, SqlRow>();
   for (const row of rows) {
     const session = sessionFrom(row);
-    if (typeof session.session_id === "string") sessions.set(session.session_id, session);
+    const sessionId = Schema.decodeUnknownOption(Schema.String)(session.session_id);
+    if (Option.isSome(sessionId)) sessions.set(sessionId.value, session);
   }
   return [...sessions.values()];
 };
@@ -180,8 +187,8 @@ const readStoredBoundary = Effect.fn("HistoricalBackfill.readStoredBoundary")(fu
     boundaryIdentity(domain),
   );
   if (rows.length === 0) return undefined;
-  const value = rows[0]?.source_fingerprint;
-  if (typeof value !== "string" || value.length === 0) {
+  const boundary = Schema.decodeUnknownOption(BoundaryRow)(rows[0]);
+  if (Option.isNone(boundary)) {
     return yield* Effect.fail(
       HistoricalBackfillFailure.make({
         operation: "read historical backfill boundary",
@@ -189,7 +196,7 @@ const readStoredBoundary = Effect.fn("HistoricalBackfill.readStoredBoundary")(fu
       }),
     );
   }
-  return value;
+  return boundary.value.source_fingerprint;
 });
 
 const maxKeyFor = Effect.fn("HistoricalBackfill.maxKeyFor")(function* (
@@ -200,11 +207,11 @@ const maxKeyFor = Effect.fn("HistoricalBackfill.maxKeyFor")(function* (
   // Text identifiers are canonical identity, not a reliable insertion order.
   // SQLite's local rowid is the monotonic sequence that prevents a newly
   // synced row with a lexicographically lower id entering this old cohort.
-  const [query, key] = [`SELECT rowid AS key FROM ${table} ORDER BY rowid DESC LIMIT 1`, "key"];
+  const query = `SELECT rowid AS key FROM ${table} ORDER BY rowid DESC LIMIT 1`;
   const rows = yield* queryRows(database, query);
-  const value = rows[0]?.[key];
-  if (value === undefined || value === null) return EMPTY_BOUNDARY;
-  if (typeof value !== "string" && typeof value !== "number") {
+  if (rows.length === 0) return EMPTY_BOUNDARY;
+  const maximum = Schema.decodeUnknownOption(MaximumKeyRow)(rows[0]);
+  if (Option.isNone(maximum)) {
     return yield* Effect.fail(
       HistoricalBackfillFailure.make({
         operation: "establish historical backfill boundary",
@@ -212,8 +219,13 @@ const maxKeyFor = Effect.fn("HistoricalBackfill.maxKeyFor")(function* (
       }),
     );
   }
-  return String(value);
+  return String(maximum.value.key);
 });
+
+function pageCursor(rows: ReadonlyArray<SqlRow>): string | undefined {
+  const cursor = Schema.decodeUnknownOption(PageCursorRow)(rows.at(-1));
+  return Option.isSome(cursor) ? String(cursor.value.cursor_key) : undefined;
+}
 
 /** Establishes the immutable historical cohort before a live source sync. */
 export const establishHistoricalBackfillBoundaries = Effect.fn(
@@ -282,11 +294,11 @@ const sessionPage = Effect.fn("HistoricalBackfill.sessionPage")(function* (
     Number(boundary),
     batchSize,
   );
-  const last = rows.at(-1)?.cursor_key;
-  if (typeof last !== "number") return undefined;
+  const last = pageCursor(rows);
+  if (last === undefined) return undefined;
   return {
     domain: "sessions",
-    cursor: String(last),
+    cursor: last,
     sessions: uniqueSessions(rows),
     prompts: [],
     skill_invocations: [],
@@ -312,11 +324,11 @@ const promptPage = Effect.fn("HistoricalBackfill.promptPage")(function* (
     Number(boundary),
     batchSize,
   );
-  const last = rows.at(-1)?.cursor_key;
-  if (typeof last !== "number") return undefined;
+  const last = pageCursor(rows);
+  if (last === undefined) return undefined;
   return {
     domain: "prompts",
-    cursor: String(last),
+    cursor: last,
     sessions: uniqueSessions(rows),
     prompts: rows.map((row) =>
       omitUndefined({
@@ -349,11 +361,11 @@ const skillInvocationPage = Effect.fn("HistoricalBackfill.skillInvocationPage")(
     Number(boundary),
     batchSize,
   );
-  const last = rows.at(-1)?.cursor_key;
-  if (typeof last !== "number") return undefined;
+  const last = pageCursor(rows);
+  if (last === undefined) return undefined;
   return {
     domain: "skill_invocations",
-    cursor: String(last),
+    cursor: last,
     sessions: uniqueSessions(rows),
     prompts: [],
     skill_invocations: rows.map((row) =>
@@ -390,11 +402,11 @@ const executionFactPage = Effect.fn("HistoricalBackfill.executionFactPage")(func
     Number(boundary),
     batchSize,
   );
-  const last = rows.at(-1)?.cursor_key;
-  if (typeof last !== "number") return undefined;
+  const last = pageCursor(rows);
+  if (last === undefined) return undefined;
   return {
     domain: "execution_facts",
-    cursor: String(last),
+    cursor: last,
     sessions: uniqueSessions(rows),
     prompts: [],
     skill_invocations: [],
@@ -443,21 +455,35 @@ const readPage = (
   }
 };
 
-const stableJson = (value: unknown): string => {
-  if (value === null || typeof value === "string" || typeof value === "number")
-    return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (typeof value !== "object") return JSON.stringify(String(value));
-  return `{${Object.keys(value)
-    .toSorted()
-    .map((key) => `${JSON.stringify(key)}:${stableJson(Reflect.get(value, key))}`)
+const serializeFields = (fields: ReadonlyArray<readonly [string, string]>): string =>
+  `{${fields
+    .toSorted(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    .map(([key, value]) => `${JSON.stringify(key)}:${value}`)
     .join(",")}}`;
+
+const serializeRows = (rows: ReadonlyArray<SqlRow>): string =>
+  `[${rows
+    .map((row) =>
+      serializeFields(Object.entries(row).map(([key, value]) => [key, JSON.stringify(value)])),
+    )
+    .join(",")}]`;
+
+const serializePage = (page: SourcePage): string => {
+  const fields: Record<keyof SourcePage, string> = {
+    cursor: JSON.stringify(page.cursor),
+    domain: JSON.stringify(page.domain),
+    execution_facts: serializeRows(page.execution_facts),
+    prompts: serializeRows(page.prompts),
+    sessions: serializeRows(page.sessions),
+    skill_invocations: serializeRows(page.skill_invocations),
+  };
+  return serializeFields(Object.entries(fields));
 };
 
 const revisionFor = (page: SourcePage) =>
   createHash("sha256")
     .update("selftune.historical-backfill.sqlite-canonical.v2\0")
-    .update(stableJson(page))
+    .update(serializePage(page))
     .digest("hex");
 
 const acknowledgeCursor = Effect.fn("HistoricalBackfill.acknowledgeCursor")(function* (

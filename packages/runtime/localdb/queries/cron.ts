@@ -1,34 +1,27 @@
 import type { Database } from "bun:sqlite";
+import type { cron_runs } from "../drizzle-schema.js";
 
-export interface CronRun {
-  id: number;
-  job_name: string;
-  started_at: string;
-  elapsed_ms: number;
-  status: string;
-  metrics_json: string | null;
-  error: string | null;
-}
+export type CronRun = typeof cron_runs.$inferSelect;
 
 export function getRecentCronRuns(db: Database, limit = 50): CronRun[] {
   return db
-    .query(
+    .query<CronRun, [number]>(
       `SELECT id, job_name, started_at, elapsed_ms, status, metrics_json, error
        FROM cron_runs
        ORDER BY started_at DESC
        LIMIT ?`,
     )
-    .all(limit) as CronRun[];
+    .all(limit);
 }
 
 export function getCronRunsByJob(db: Database, jobName: string, limit = 50): CronRun[] {
   return db
-    .query(
+    .query<CronRun, [string, number]>(
       `SELECT id, job_name, started_at, elapsed_ms, status, metrics_json, error
        FROM cron_runs
        WHERE job_name = ?
        ORDER BY started_at DESC
        LIMIT ?`,
     )
-    .all(jobName, limit) as CronRun[];
+    .all(jobName, limit);
 }

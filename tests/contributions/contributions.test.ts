@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "b
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { installFetchSpy } from "../helpers/fetch-spy.js";
 
 const configDir = mkdtempSync(join(tmpdir(), "selftune-contributions-test-"));
 const skillDir = mkdtempSync(join(tmpdir(), "selftune-contribution-skills-"));
@@ -22,8 +23,8 @@ const { discoverCreatorContributionConfigs } = configDiscoveryMod;
 
 const originalArgv = [...process.argv];
 const originalLog = console.log;
-const originalFetch = globalThis.fetch;
-let db = openDb(":memory:");
+let restoreFetch = () => {};
+let db: ReturnType<typeof openDb>;
 const SEARCH_CREATOR_ID = "550e8400-e29b-41d4-a716-446655440000";
 const COMPARE_CREATOR_ID = "550e8400-e29b-41d4-a716-446655440001";
 
@@ -83,24 +84,22 @@ beforeEach(() => {
   _setTestDb(db);
   resetContributionPreferencesState();
   process.argv = [...originalArgv];
-  globalThis.fetch = originalFetch;
-  try {
-    rmSync(contributionPreferencesPath, { force: true });
-  } catch {
-    // ignore
-  }
+  restoreFetch = installFetchSpy(async () => {
+    throw new Error("Unexpected network request in contribution test");
+  });
+  rmSync(contributionPreferencesPath, { force: true });
   rmSync(skillDir, { recursive: true, force: true });
   mkdirSync(skillDir, { recursive: true });
 });
 
 afterEach(() => {
+  restoreFetch();
   _setTestDb(null);
 });
 
 afterAll(() => {
   console.log = originalLog;
   process.argv = originalArgv;
-  globalThis.fetch = originalFetch;
   if (originalConfigDir === undefined) {
     delete process.env.SELFTUNE_CONFIG_DIR;
   } else {
@@ -130,7 +129,7 @@ describe("contributions preferences", () => {
 
     const prefs = loadContributionPreferences();
     expect(prefs.skills["sc-search"]?.status).toBe("opted_in");
-    expect(typeof prefs.skills["sc-search"]?.opted_in_at).toBe("string");
+    expect(prefs.skills["sc-search"]?.opted_in_at).toBeString();
     expect(prefs.skills["sc-search"]?.creator_id).toBe(SEARCH_CREATOR_ID);
     expect(prefs.skills["sc-search"]?.signals).toEqual(["trigger", "grade", "miss_category"]);
   });
@@ -155,7 +154,7 @@ describe("contributions preferences", () => {
 
     const prefs = loadContributionPreferences();
     expect(prefs.skills["sc-search"]?.status).toBe("opted_out");
-    expect(typeof prefs.skills["sc-search"]?.opted_out_at).toBe("string");
+    expect(prefs.skills["sc-search"]?.opted_out_at).toBeString();
   });
 
   test("default updates global behavior", async () => {
@@ -281,9 +280,12 @@ describe("contributions preferences", () => {
         "2026-04-01T00:00:00.000Z",
       ],
     );
-    globalThis.fetch = mock(
-      async () => new Response(JSON.stringify({ status: "accepted" }), { status: 201 }),
-    ) as unknown as typeof fetch;
+    const requests: Request[] = [];
+    restoreFetch();
+    restoreFetch = installFetchSpy(async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json({ status: "accepted" }, { status: 201 });
+    });
     console.log = mock(() => {});
     process.argv = [
       "bun",
@@ -298,9 +300,15 @@ describe("contributions preferences", () => {
     await cliMain();
 
     const row = db
-      .query(`SELECT status FROM creator_contribution_staging WHERE skill_name = 'sc-search'`)
-      .get() as { status: string } | null;
+      .query<{ status: string }, []>(
+        `SELECT status FROM creator_contribution_staging WHERE skill_name = 'sc-search'`,
+      )
+      .get();
     expect(row?.status).toBe("sent");
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.url).toBe("https://creator.example.test/api/signals");
+    expect(requests[0]?.method).toBe("POST");
+    expect(requests[0]?.headers.get("authorization")).toBe("Bearer st_test_123");
   });
 
   test("upload can retry failed rows", async () => {
@@ -324,9 +332,12 @@ describe("contributions preferences", () => {
         "2026-04-01T00:00:00.000Z",
       ],
     );
-    globalThis.fetch = mock(
-      async () => new Response(JSON.stringify({ status: "accepted" }), { status: 201 }),
-    ) as unknown as typeof fetch;
+    const requests: Request[] = [];
+    restoreFetch();
+    restoreFetch = installFetchSpy(async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json({ status: "accepted" }, { status: 201 });
+    });
     const lines: string[] = [];
     console.log = mock((...args: unknown[]) => {
       lines.push(args.join(" "));
@@ -346,8 +357,13 @@ describe("contributions preferences", () => {
 
     expect(lines.join("\n")).toContain("failed rows requeued: 1");
     const row = db
-      .query(`SELECT status FROM creator_contribution_staging WHERE skill_name = 'sc-search'`)
-      .get() as { status: string } | null;
+      .query<{ status: string }, []>(
+        `SELECT status FROM creator_contribution_staging WHERE skill_name = 'sc-search'`,
+      )
+      .get();
     expect(row?.status).toBe("sent");
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.url).toBe("https://creator.example.test/api/signals");
+    expect(requests[0]?.method).toBe("POST");
   });
 });

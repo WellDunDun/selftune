@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,9 +7,16 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { RemoteLibrary, RemoteLibraryMemory } from "@selftune/control-plane";
 import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Schema from "effect/Schema";
 
 import { startDashboardServer } from "@selftune/local/dashboard-server";
 import { loadLibraryCatalog } from "../../packages/runtime/library-catalog.js";
+import { computeSkillVersionHash } from "@selftune/library/hash";
+import { searchLocalSkills } from "../../packages/runtime/skill-search/search.js";
+import {
+  activateSkills,
+  deactivateSkills,
+} from "../../packages/runtime/skill-search/activation.js";
 import { openDb } from "../../packages/runtime/localdb/db.js";
 import type { RemoteLibraryHandle } from "../../packages/runtime/remote-library-runtime.js";
 import {
@@ -17,6 +25,54 @@ import {
 } from "../../packages/runtime/remote-library-sync.js";
 import { scanSynthesisCandidates } from "../../packages/runtime/synthesis.js";
 import type { CreatePackageEvaluationSummary } from "../../packages/runtime/types.js";
+
+const LibraryResponse = Schema.Struct({
+  skills: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      locations: Schema.Array(Schema.Json),
+    }),
+  ),
+});
+const InsightsResponse = Schema.Struct({
+  snapshot: Schema.Struct({
+    candidates: Schema.Array(Schema.Struct({ candidateId: Schema.String })),
+  }),
+});
+const DraftResponse = Schema.Struct({
+  draft: Schema.Struct({ skill_dir: Schema.String }),
+});
+const ReleaseResponse = Schema.Struct({
+  skill_name: Schema.String,
+  package_path: Schema.String,
+});
+const SkillSetResponse = Schema.Struct({ set_id: Schema.String });
+const PlanResponse = Schema.Struct({ creates: Schema.Number });
+const ApplyResponse = Schema.Struct({ status: Schema.Literal("applied") });
+const QuarantineResponse = Schema.Struct({
+  receipts: Schema.Array(Schema.Struct({ quarantine_id: Schema.String })),
+  failures: Schema.Array(Schema.Json),
+});
+const SyncResponse = Schema.Struct({
+  snapshot: Schema.Struct({ artifacts: Schema.Array(Schema.Json) }),
+});
+
+function authenticatedClient(origin: string, token: string) {
+  return async <A>(path: string, schema: Schema.Decoder<A>, body?: typeof Schema.Json.Type) => {
+    const headers = new Headers({ Authorization: `Bearer ${token}` });
+    if (body !== undefined) {
+      headers.set("Origin", origin);
+      headers.set("Content-Type", "application/json");
+    }
+    const response = await fetch(`${origin}${path}`, {
+      method: body === undefined ? "GET" : "POST",
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    expect(response.status).toBe(200);
+    return Schema.decodeUnknownSync(schema)(await response.json());
+  };
+}
 
 const roots: string[] = [];
 
@@ -209,59 +265,56 @@ describe("desktop-hosted Library lifecycle", () => {
             return restoreRemoteLibrary({ handle: remote, targetRoot: cleanRoot });
           }
           const head = await remote.head();
-          return { head, diagnostics: await remote.diagnostics() };
+          return {
+            url: "http://library.test",
+            capabilities: await remote.capabilities(),
+            head,
+            diagnostics: await remote.diagnostics(),
+          };
         },
       });
       const origin = `http://127.0.0.1:${primary.port}`;
-      const request = async (path: string, body?: unknown) => {
-        const response = await fetch(`${origin}${path}`, {
-          method: body === undefined ? "GET" : "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            ...(body === undefined ? {} : { Origin: origin, "Content-Type": "application/json" }),
-          },
-          body: body === undefined ? undefined : JSON.stringify(body),
-        });
-        expect(response.status).toBe(200);
-        return response.json();
-      };
+      const request = authenticatedClient(origin, token);
 
-      const firstLibrary = await request("/api/v2/library");
-      expect(
-        firstLibrary.skills.find((skill: { name: string }) => skill.name === "research").locations,
-      ).toHaveLength(2);
+      const firstLibrary = await request("/api/v2/library", LibraryResponse);
+      const research = firstLibrary.skills.find((skill) => skill.name === "research");
+      assert(research);
+      expect(research.locations).toHaveLength(2);
 
-      const inbox = await request("/api/v2/insights");
+      const inbox = await request("/api/v2/insights", InsightsResponse);
       const candidate = inbox.snapshot.candidates[0];
-      await request("/api/v2/insights/review", {
+      assert(candidate);
+      await request("/api/v2/insights/review", Schema.Json, {
         candidate_id: candidate.candidateId,
         action: "accept",
         reason: "Reusable evidence across projects.",
       });
-      const drafted = await request("/api/v2/insights/draft", {
+      const drafted = await request("/api/v2/insights/draft", DraftResponse, {
         candidate_id: candidate.candidateId,
       });
       expect(existsSync(join(drafted.draft.skill_dir, "evals", "release.json"))).toBe(true);
       const releaseEvals = readFileSync(join(drafted.draft.skill_dir, "evals", "release.json"));
       expect(releaseEvals.toString()).not.toContain("session-");
-      await request("/api/v2/insights/evaluate", { candidate_id: candidate.candidateId });
-      const released = await request("/api/v2/insights/release", {
+      await request("/api/v2/insights/evaluate", Schema.Json, {
+        candidate_id: candidate.candidateId,
+      });
+      const released = await request("/api/v2/insights/release", ReleaseResponse, {
         candidate_id: candidate.candidateId,
       });
 
-      const set = await request("/api/v2/skill-sets", {
+      const set = await request("/api/v2/skill-sets", SkillSetResponse, {
         name: "Release projects",
         harnesses: ["codex", "opencode"],
         skills: [{ name: released.skill_name, package_path: released.package_path }],
       });
       const projectRoot = join(root, "materialized-project");
       mkdirSync(projectRoot);
-      const plan = await request("/api/v2/skill-sets/plan", {
+      const plan = await request("/api/v2/skill-sets/plan", PlanResponse, {
         set_id: set.set_id,
         project_root: projectRoot,
       });
       expect(plan.creates).toBe(2);
-      const receipt = await request("/api/v2/skill-sets/apply", {
+      const receipt = await request("/api/v2/skill-sets/apply", ApplyResponse, {
         set_id: set.set_id,
         project_root: projectRoot,
       });
@@ -269,9 +322,16 @@ describe("desktop-hosted Library lifecycle", () => {
       expect(existsSync(join(projectRoot, ".agents", "skills", released.skill_name))).toBe(true);
       expect(existsSync(join(projectRoot, ".opencode", "skills", released.skill_name))).toBe(true);
 
-      const archived = await request("/api/v2/portfolio/quarantine-batch", {
+      const trialHash = computeSkillVersionHash(join(trialPath, "SKILL.md"));
+      assert(trialHash);
+      const archived = await request("/api/v2/portfolio/quarantine-batch", QuarantineResponse, {
         skills: [
-          { skill_name: "trial-skill", skill_path: trialPath },
+          {
+            skill_name: "trial-skill",
+            skill_path: trialPath,
+            keep_searchable: true,
+            expected_content_hash: trialHash,
+          },
           { skill_name: "batch-skill", skill_path: batchPath },
         ],
       });
@@ -279,9 +339,34 @@ describe("desktop-hosted Library lifecycle", () => {
       expect(archived.failures).toEqual([]);
       expect(existsSync(trialPath)).toBe(false);
       expect(existsSync(batchPath)).toBe(false);
+      const searchOptions = { configRoot, searchDirs: [codexRegistry, openCodeRegistry] };
+      const onDemand = searchLocalSkills({ ...searchOptions, query: "trial-skill" }).results.find(
+        (hit) => hit.name === "trial-skill",
+      );
+      assert(onDemand);
+      expect(
+        searchLocalSkills({ ...searchOptions, query: "batch-skill" }).results.some(
+          (hit) => hit.name === "batch-skill",
+        ),
+      ).toBe(false);
+      const temporaryProject = join(root, "on-demand-project");
+      mkdirSync(temporaryProject);
+      const activation = activateSkills({
+        ...searchOptions,
+        project: temporaryProject,
+        task: "demo",
+        harness: "codex",
+        selection: { ids: [onDemand.id] },
+      });
+      expect(activation.status).toBe("applied");
+      const temporarySkill = join(temporaryProject, ".agents", "skills", "trial-skill", "SKILL.md");
+      expect(readFileSync(temporarySkill, "utf8")).toContain("trial-skill work");
+      deactivateSkills({ configRoot, project: temporaryProject, owner: { task: "demo" } });
+      expect(existsSync(temporarySkill)).toBe(false);
+      expect(existsSync(onDemand.skill_path)).toBe(true);
       await Promise.all(
         archived.receipts.map((archiveReceipt) =>
-          request("/api/v2/portfolio/restore", {
+          request("/api/v2/portfolio/restore", Schema.Json, {
             quarantine_id: archiveReceipt.quarantine_id,
           }),
         ),
@@ -289,9 +374,9 @@ describe("desktop-hosted Library lifecycle", () => {
       expect(existsSync(join(trialPath, "SKILL.md"))).toBe(true);
       expect(existsSync(join(batchPath, "SKILL.md"))).toBe(true);
 
-      const synced = await request("/api/v2/settings/remote-library/sync", {});
+      const synced = await request("/api/v2/settings/remote-library/sync", SyncResponse, {});
       expect(synced.snapshot.artifacts.length).toBeGreaterThan(0);
-      await request("/api/v2/settings/remote-library/restore", {});
+      await request("/api/v2/settings/remote-library/restore", Schema.Json, {});
       expect(existsSync(join(cleanRoot, "skill-sets", `${set.set_id}.json`))).toBe(true);
       expect(existsSync(join(cleanRoot, ".agents"))).toBe(false);
 
@@ -304,34 +389,17 @@ describe("desktop-hosted Library lifecycle", () => {
         libraryLoader: () => loadLibraryCatalog({ searchDirs: [], skillSetConfigRoot: cleanRoot }),
       });
       const restoredOrigin = `http://127.0.0.1:${restored.port}`;
-      const restoredRequest = async (path: string, body?: unknown) => {
-        const response = await fetch(`${restoredOrigin}${path}`, {
-          method: body === undefined ? "GET" : "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            ...(body === undefined
-              ? {}
-              : { Origin: restoredOrigin, "Content-Type": "application/json" }),
-          },
-          body: body === undefined ? undefined : JSON.stringify(body),
-        });
-        expect(response.status).toBe(200);
-        return response.json();
-      };
-      const restoredLibrary = await restoredRequest("/api/v2/library");
-      expect(
-        restoredLibrary.skills.some(
-          (skill: { name: string }) => skill.name === released.skill_name,
-        ),
-      ).toBe(true);
+      const restoredRequest = authenticatedClient(restoredOrigin, token);
+      const restoredLibrary = await restoredRequest("/api/v2/library", LibraryResponse);
+      expect(restoredLibrary.skills.some((skill) => skill.name === released.skill_name)).toBe(true);
       const restoredProject = join(root, "restored-materialized-project");
       mkdirSync(restoredProject);
-      const restoredPlan = await restoredRequest("/api/v2/skill-sets/plan", {
+      const restoredPlan = await restoredRequest("/api/v2/skill-sets/plan", PlanResponse, {
         set_id: set.set_id,
         project_root: restoredProject,
       });
       expect(restoredPlan.creates).toBe(2);
-      await restoredRequest("/api/v2/skill-sets/apply", {
+      await restoredRequest("/api/v2/skill-sets/apply", ApplyResponse, {
         set_id: set.set_id,
         project_root: restoredProject,
       });

@@ -1,5 +1,6 @@
 /* oxlint-disable max-lines -- one private DuckDB adapter owns schema, migration, and atomic topology ingest. */
 import { SELFTUNE_LOCAL_ANALYTICS_PATH } from "@selftune/config/paths";
+import type { DuckDBValue } from "@duckdb/node-api";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -355,7 +356,7 @@ type DerivedMetricName = "input_tokens" | "output_tokens" | "error_count" | "too
 
 /** Minimal stable seam over @duckdb/node-api, kept private to this module. */
 export interface DuckDbQueryResult {
-  readonly getRowObjects: () => Promise<ReadonlyArray<Record<string, unknown>>>;
+  readonly getRowObjects: () => Promise<ReadonlyArray<Record<string, DuckDBValue>>>;
 }
 
 export interface DuckDbConnection {
@@ -380,10 +381,10 @@ export interface DuckDbAnalyticalStoreService {
    * access: SQLite checkpoints are only valid while this receipt also exists.
    */
   readonly hasExactBatchReceipt: (
-    input: unknown,
+    input: typeof DuckDbAnalyticalBatch.Encoded,
   ) => Effect.Effect<boolean, DuckDbAnalyticalStoreFailure>;
   readonly ingest: (
-    input: unknown,
+    input: typeof DuckDbAnalyticalBatch.Encoded,
   ) => Effect.Effect<DuckDbAnalyticalIngestReceipt, DuckDbAnalyticalStoreFailure>;
   readonly querySkillSignals: () => Effect.Effect<
     ReadonlyArray<DuckDbSkillTraceSignals>,
@@ -391,16 +392,16 @@ export interface DuckDbAnalyticalStoreService {
   >;
   /** Returns concrete, source-native references only; it never resolves transcript bodies. */
   readonly queryEvidenceCohortCandidates: (
-    input: unknown,
+    input: typeof DuckDbEvidenceCohortQuery.Encoded,
   ) => Effect.Effect<ReadonlyArray<EvidenceCohortCandidate>, DuckDbAnalyticalStoreFailure>;
   readonly queryHistoricalSkillTaskReferences: (
-    input: unknown,
+    input: typeof DuckDbHistoricalSkillTaskQuery.Encoded,
   ) => Effect.Effect<
     ReadonlyArray<DuckDbHistoricalSkillTaskReference>,
     DuckDbAnalyticalStoreFailure
   >;
   readonly queryHistoricalMetricRollups: (
-    input: unknown,
+    input: typeof DuckDbHistoricalMetricRollupQuery.Encoded,
   ) => Effect.Effect<DuckDbHistoricalMetricRollupPage, DuckDbAnalyticalStoreFailure>;
   readonly health: () => Effect.Effect<DuckDbAnalyticalStoreHealth, DuckDbAnalyticalStoreFailure>;
 }
@@ -963,10 +964,9 @@ const migrate = Effect.fn("DuckDbAnalyticalStore.migrate")(function* (
   );
   const versionRows = yield* readRows(versionResult, "read DuckDB schema migration version");
   const existingVersion = versionRows.at(0)?.version;
-  const migrationVersion =
-    typeof existingVersion === "number" || typeof existingVersion === "bigint"
-      ? Number(existingVersion)
-      : 0;
+  const migrationVersion = Schema.is(Schema.Union([Schema.Number, Schema.BigInt]))(existingVersion)
+    ? Number(existingVersion)
+    : 0;
   if (migrationVersion > 9) {
     return yield* Effect.fail(
       DuckDbAnalyticalStoreFailure.make({
@@ -1003,7 +1003,7 @@ const migrate = Effect.fn("DuckDbAnalyticalStore.migrate")(function* (
   for (const statement of v9MigrationStatements) yield* runStatement(connection, statement);
 });
 
-const decodeBatch = (input: unknown) =>
+const decodeBatch = (input: typeof DuckDbAnalyticalBatch.Encoded) =>
   Schema.decodeUnknownEffect(DuckDbAnalyticalBatch)(input).pipe(
     Effect.flatMap(validateBatchTimestamps),
     Effect.catchTag("SchemaError", (error) =>
@@ -1063,7 +1063,7 @@ const batchDisposition = Effect.fn("DuckDbAnalyticalStore.batchDisposition")(fun
 
 const hasExactBatchReceipt = Effect.fn("DuckDbAnalyticalStore.hasExactBatchReceipt")(function* (
   connection: DuckDbConnection,
-  input: unknown,
+  input: typeof DuckDbAnalyticalBatch.Encoded,
 ) {
   const batch = yield* decodeBatch(input);
   const result = yield* runStatement(
@@ -1086,7 +1086,7 @@ const hasExactBatchReceipt = Effect.fn("DuckDbAnalyticalStore.hasExactBatchRecei
 
 const ingestBatch = Effect.fn("DuckDbAnalyticalStore.ingest")(function* (
   connection: DuckDbConnection,
-  input: unknown,
+  input: typeof DuckDbAnalyticalBatch.Encoded,
 ) {
   const batch = yield* decodeBatch(input);
   yield* runStatement(connection, "BEGIN TRANSACTION");
@@ -1478,7 +1478,7 @@ const querySkillSignals = Effect.fn("DuckDbAnalyticalStore.querySkillSignals")(f
 
 const queryEvidenceCohortCandidates = Effect.fn(
   "DuckDbAnalyticalStore.queryEvidenceCohortCandidates",
-)(function* (connection: DuckDbConnection, input: unknown) {
+)(function* (connection: DuckDbConnection, input: typeof DuckDbEvidenceCohortQuery.Encoded) {
   const query = yield* Schema.decodeUnknownEffect(DuckDbEvidenceCohortQuery)(input).pipe(
     Effect.catchTag("SchemaError", (error) =>
       Effect.fail(
@@ -1542,7 +1542,7 @@ const queryEvidenceCohortCandidates = Effect.fn(
 
 const queryHistoricalSkillTaskReferences = Effect.fn(
   "DuckDbAnalyticalStore.queryHistoricalSkillTaskReferences",
-)(function* (connection: DuckDbConnection, input: unknown) {
+)(function* (connection: DuckDbConnection, input: typeof DuckDbHistoricalSkillTaskQuery.Encoded) {
   const query = yield* Schema.decodeUnknownEffect(DuckDbHistoricalSkillTaskQuery)(input).pipe(
     Effect.catchTag("SchemaError", (error) =>
       Effect.fail(
@@ -1603,7 +1603,10 @@ const queryHistoricalSkillTaskReferences = Effect.fn(
 /** Latest source snapshot per trace/metric. Cumulative points are never summed. */
 const queryHistoricalMetricRollups = Effect.fn(
   "DuckDbAnalyticalStore.queryHistoricalMetricRollups",
-)(function* (connection: DuckDbConnection, input: unknown) {
+)(function* (
+  connection: DuckDbConnection,
+  input: typeof DuckDbHistoricalMetricRollupQuery.Encoded,
+) {
   const query = yield* Schema.decodeUnknownEffect(DuckDbHistoricalMetricRollupQuery)(input).pipe(
     Effect.catchTag("SchemaError", (error) =>
       Effect.fail(
@@ -1647,12 +1650,13 @@ const queryHistoricalMetricRollups = Effect.fn(
   );
   const items = decoded.slice(0, query.limit);
   const last = items.at(-1);
-  return DuckDbHistoricalMetricRollupPage.make({
-    items,
-    ...(decoded.length > query.limit && last !== undefined
-      ? { next: { trace_id: last.trace_id, metric_name: last.metric_name } }
-      : {}),
-  });
+  if (decoded.length > query.limit && last !== undefined) {
+    return DuckDbHistoricalMetricRollupPage.make({
+      items,
+      next: { trace_id: last.trace_id, metric_name: last.metric_name },
+    });
+  }
+  return DuckDbHistoricalMetricRollupPage.make({ items });
 });
 
 class HealthRow extends Schema.Class<HealthRow>("HealthRow")({

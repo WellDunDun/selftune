@@ -17,7 +17,10 @@ import {
 import type { RemoteLibraryHandle } from "@selftune/library/remote/transport";
 import * as Schema from "effect/Schema";
 
-import { mergeSkillIntelligenceLearnedState } from "../skill-intelligence/learned-state.js";
+import {
+  mergeSkillIntelligenceLearnedState,
+  SkillIntelligenceLearnedState,
+} from "../skill-intelligence/learned-state.js";
 import { CLIError } from "../utils/cli-error.js";
 import { computeSkillVersionHash } from "../utils/skill-discovery.js";
 import { fromRemote } from "./errors.js";
@@ -54,7 +57,9 @@ export async function pullRemoteLibraryState(options: {
         "GUARD_BLOCKED",
       );
     }
-    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    const parsed = Schema.decodeUnknownSync(Schema.fromJsonString(SkillIntelligenceLearnedState))(
+      new TextDecoder().decode(bytes),
+    );
     mergeSkillIntelligenceLearnedState(options.db, parsed);
   }
 }

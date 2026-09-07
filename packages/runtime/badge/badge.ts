@@ -18,12 +18,6 @@ import {
 } from "../localdb/queries.js";
 import { doctor } from "../observability.js";
 import { computeStatus } from "../status.js";
-import type {
-  EvolutionAuditEntry,
-  QueryLogRecord,
-  SessionTelemetryRecord,
-  SkillUsageRecord,
-} from "../types.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import type { BadgeData, BadgeFormat } from "./badge-data.js";
 import { findSkillBadgeData } from "./badge-data.js";
@@ -39,7 +33,7 @@ Options:
   --output <path>   Write to file instead of stdout
   --help            Show this help`;
 
-const VALID_FORMATS = new Set<BadgeFormat>(["svg", "markdown", "url"]);
+const VALID_FORMATS = ["svg", "markdown", "url"] as const;
 
 export interface BadgeInput {
   skill: string;
@@ -61,10 +55,10 @@ export interface BadgeDependencies {
 
 const loadBadgeData = async (skill: string): Promise<BadgeData | null> => {
   const db = getDb();
-  const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
-  const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-  const queryRecords = queryQueryLog(db) as QueryLogRecord[];
-  const auditEntries = queryEvolutionAudit(db) as EvolutionAuditEntry[];
+  const telemetry = querySessionTelemetry(db);
+  const skillRecords = querySkillUsageRecords(db);
+  const queryRecords = queryQueryLog(db);
+  const auditEntries = queryEvolutionAudit(db);
   const doctorResult = await doctor();
   const result = computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
   return findSkillBadgeData(result, skill);
@@ -126,7 +120,8 @@ export async function cliMain(): Promise<void> {
     throw new CLIError("--skill is required", "MISSING_FLAG", "selftune badge --skill <name>");
   }
 
-  if (values.format && !VALID_FORMATS.has(values.format as BadgeFormat)) {
+  const format = VALID_FORMATS.find((candidate) => candidate === (values.format || "svg"));
+  if (format === undefined) {
     throw new CLIError(
       `Invalid format '${values.format}'. Must be one of: svg, markdown, url`,
       "INVALID_FLAG",
@@ -134,15 +129,12 @@ export async function cliMain(): Promise<void> {
     );
   }
 
-  const format: BadgeFormat =
-    values.format && VALID_FORMATS.has(values.format as BadgeFormat)
-      ? (values.format as BadgeFormat)
-      : "svg";
-  await runBadgeProgram({
+  const input: BadgeInput = {
     skill: values.skill,
     format,
-    ...(values.output ? { output: values.output } : {}),
-  });
+  };
+  if (values.output) input.output = values.output;
+  await runBadgeProgram(input);
 }
 
 if (import.meta.main) {

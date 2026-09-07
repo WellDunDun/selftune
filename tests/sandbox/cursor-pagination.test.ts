@@ -6,7 +6,12 @@
  */
 
 import type { Database } from "bun:sqlite";
-import { describe, expect, it, beforeEach } from "bun:test";
+import { describe, expect, it, beforeEach, afterEach } from "bun:test";
+
+import {
+  parseCursorParam,
+  parseIntParam,
+} from "../../packages/runtime/dashboard-contract/pagination.js";
 
 import { openDb } from "../../packages/runtime/localdb/db.js";
 import {
@@ -63,6 +68,42 @@ beforeEach(() => {
   db = openDb(":memory:");
 });
 
+afterEach(() => db.close());
+
+describe("pagination URL boundary", () => {
+  it("preserves string and finite numeric IDs and discards non-cursor fields", () => {
+    for (const id of ["inv-1", "", 0, -2, 1.5]) {
+      const cursor = { timestamp: "2026-09-06T12:00:00Z", id };
+      expect(parseCursorParam(JSON.stringify({ ...cursor, unrelated: "ignored" }))).toEqual(cursor);
+    }
+  });
+
+  it("treats absent or malformed cursors as the first page", () => {
+    for (const value of [
+      undefined,
+      null,
+      "",
+      "{broken",
+      "null",
+      "[]",
+      "{}",
+      '{"timestamp":4,"id":1}',
+      '{"timestamp":"t","id":true}',
+      '{"timestamp":"t","id":1e400}',
+    ]) {
+      expect(parseCursorParam(value)).toBeNull();
+    }
+  });
+
+  it("retains default limits and bounds user-supplied limits", () => {
+    expect(parseIntParam(null, 50)).toBe(50);
+    expect(parseIntParam("invalid", 50)).toBe(50);
+    expect(parseIntParam("-3", 50)).toBe(1);
+    expect(parseIntParam("20000", 50)).toBe(10000);
+    expect(parseIntParam("12", 50)).toBe(12);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Overview paginated telemetry
 // ---------------------------------------------------------------------------
@@ -83,7 +124,7 @@ describe("getOverviewPayloadPaginated — telemetry cursor", () => {
       telemetry_limit: 3,
     });
     expect(first.telemetry_page.next_cursor).not.toBeNull();
-    const cursor = first.telemetry_page.next_cursor;
+    const cursor = parseCursorParam(JSON.stringify(first.telemetry_page.next_cursor));
     if (!cursor) {
       throw new Error("expected telemetry cursor");
     }
@@ -201,7 +242,7 @@ describe("getSkillReportPayloadPaginated — invocations cursor", () => {
       invocations_limit: 5,
     });
     expect(first.invocations_page.next_cursor).not.toBeNull();
-    const cursor = first.invocations_page.next_cursor;
+    const cursor = parseCursorParam(JSON.stringify(first.invocations_page.next_cursor));
     if (!cursor) {
       throw new Error("expected invocations cursor");
     }

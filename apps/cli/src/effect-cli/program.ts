@@ -84,7 +84,6 @@ const disabledTestAlphaAction = (action: keyof AlphaCommandActions) => () =>
   );
 
 const disabledTestAlphaActions: AlphaCommandActions = {
-  upload: disabledTestAlphaAction("upload"),
   relink: disabledTestAlphaAction("relink"),
 };
 

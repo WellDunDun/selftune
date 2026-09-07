@@ -2,6 +2,7 @@
 
 import { writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
+import * as Option from "effect/Option";
 
 import { buildPushPayloadV2 } from "@selftune/runtime/canonical-payload";
 import { CANONICAL_LOG, CLAUDE_CODE_PROJECTS_DIR } from "@selftune/runtime/constants";
@@ -12,13 +13,13 @@ import {
 } from "@selftune/harness-claude-code/ingestors/claude-replay";
 import { getDb } from "@selftune/local-store";
 import { queryEvolutionEvidence } from "@selftune/runtime/localdb/queries";
+import { decodeEvolutionEvidenceRecord } from "@selftune/runtime/utils/log-contracts";
 import {
   CANONICAL_PLATFORMS,
   CANONICAL_RECORD_KINDS,
   type CanonicalPlatform,
   type CanonicalRecord,
   type CanonicalRecordKind,
-  type EvolutionEvidenceEntry,
 } from "@selftune/runtime/types";
 import {
   filterCanonicalRecords,
@@ -37,18 +38,20 @@ function exitWithUsage(message?: string): never {
 
 function validatePlatform(value: string | undefined): CanonicalPlatform | undefined {
   if (!value) return undefined;
-  if (!CANONICAL_PLATFORMS.includes(value as CanonicalPlatform)) {
+  const platform = CANONICAL_PLATFORMS.find((candidate) => candidate === value);
+  if (platform === undefined) {
     exitWithUsage(`Unknown platform: ${value}`);
   }
-  return value as CanonicalPlatform;
+  return platform;
 }
 
 function validateRecordKind(value: string | undefined): CanonicalRecordKind | undefined {
   if (!value) return undefined;
-  if (!CANONICAL_RECORD_KINDS.includes(value as CanonicalRecordKind)) {
+  const recordKind = CANONICAL_RECORD_KINDS.find((candidate) => candidate === value);
+  if (recordKind === undefined) {
     exitWithUsage(`Unknown record kind: ${value}`);
   }
-  return value as CanonicalRecordKind;
+  return recordKind;
 }
 
 export function loadCanonicalRecordsForExport(
@@ -103,10 +106,10 @@ export function cliMain(): void {
     ? `${JSON.stringify(
         buildPushPayloadV2(
           records,
-          (() => {
-            const db = getDb();
-            return queryEvolutionEvidence(db) as EvolutionEvidenceEntry[];
-          })(),
+          queryEvolutionEvidence(getDb()).flatMap((row) => {
+            const decoded = decodeEvolutionEvidenceRecord(row, { onExcessProperty: "preserve" });
+            return Option.isSome(decoded) ? [decoded.value] : [];
+          }),
         ),
         null,
         values.pretty ? 2 : undefined,

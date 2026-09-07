@@ -11,6 +11,11 @@
  * `should_trigger: true` half of trigger evals.
  */
 
+import { Option, Schema } from "effect";
+import {
+  decodeTranscriptLine,
+  decodeTranscriptToolInput,
+} from "@selftune/runtime/utils/transcript-contract";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
@@ -24,7 +29,7 @@ import {
   deriveSkillInvocationId,
   getLatestPromptIdentity,
 } from "@selftune/runtime/normalization";
-import type { PostToolUsePayload, SkillUsageRecord } from "@selftune/runtime/types";
+import { PostToolUsePayload, type SkillUsageRecord } from "@selftune/runtime/types";
 import {
   classifySkillPath,
   computeSkillVersionHash,
@@ -65,31 +70,18 @@ export function countSkillToolInvocations(transcriptPath: string, skillName: str
     let matches = 0;
 
     for (let i = lines.length - 1; i >= 0; i--) {
-      let entry: Record<string, unknown>;
-      try {
-        entry = JSON.parse(lines[i]);
-      } catch {
-        continue;
-      }
-
-      const msg = (entry.message as Record<string, unknown>) ?? entry;
-      const role = (msg.role as string) ?? (entry.role as string) ?? "";
+      const parsed = decodeTranscriptLine(lines[i]);
+      if (Option.isNone(parsed)) continue;
+      const entry = parsed.value;
+      const msg = entry.message ?? entry;
+      const role = msg.role ?? entry.role ?? "";
       if (role !== "assistant") continue;
-
-      const entryContent = msg.content ?? entry.content ?? "";
-      if (!Array.isArray(entryContent)) continue;
-
-      for (const block of entryContent) {
-        if (typeof block !== "object" || block === null) continue;
-        const b = block as Record<string, unknown>;
-        if (b.type !== "tool_use") continue;
-
-        const toolName = (b.name as string) ?? "";
-        if (toolName === "Skill") {
-          const inp = (b.input as Record<string, unknown>) ?? {};
-          const skillArg = (inp.skill as string) ?? (inp.name as string) ?? "";
-          if (skillArg === skillName) matches += 1;
-        }
+      const content = msg.content ?? entry.content;
+      if (content === undefined || Schema.is(Schema.String)(content)) continue;
+      for (const block of content) {
+        if (block?.type !== "tool_use" || block.name !== "Skill") continue;
+        const input = decodeTranscriptToolInput(block.input ?? {});
+        if ((input.skill ?? input.name) === skillName) matches += 1;
       }
     }
 
@@ -110,26 +102,17 @@ export function findLatestSkillToolInvocationId(
   try {
     const lines = readFileSync(transcriptPath, "utf-8").trim().split("\n");
     for (let i = lines.length - 1; i >= 0; i--) {
-      let entry: Record<string, unknown>;
-      try {
-        entry = JSON.parse(lines[i] ?? "");
-      } catch {
-        continue;
-      }
-      const msg = (entry.message as Record<string, unknown>) ?? entry;
+      const parsed = decodeTranscriptLine(lines[i]);
+      if (Option.isNone(parsed)) continue;
+      const entry = parsed.value;
+      const msg = entry.message ?? entry;
+      if ((msg.role ?? entry.role) !== "assistant") continue;
       const content = msg.content ?? entry.content;
-      if (!Array.isArray(content)) continue;
+      if (content === undefined || Schema.is(Schema.String)(content)) continue;
       for (const block of content) {
-        if (!block || typeof block !== "object") continue;
-        const candidate = block as Record<string, unknown>;
-        const input = candidate.input as Record<string, unknown> | undefined;
-        if (
-          candidate.type === "tool_use" &&
-          candidate.name === "Skill" &&
-          (input?.skill === skillName || input?.name === skillName)
-        ) {
-          return typeof candidate.id === "string" ? candidate.id : undefined;
-        }
+        if (block?.type !== "tool_use" || block.name !== "Skill") continue;
+        const input = decodeTranscriptToolInput(block.input ?? {});
+        if (input.skill === skillName || input.name === skillName) return block.id;
       }
     }
   } catch {
@@ -164,8 +147,7 @@ export async function processToolUse(
   // Only care about Read tool for SKILL.md detection
   if (payload.tool_name !== "Read") return null;
 
-  const rawPath = payload.tool_input?.file_path;
-  const filePath = typeof rawPath === "string" ? rawPath : "";
+  const filePath = decodeTranscriptToolInput(payload.tool_input).file_path ?? "";
   const skillName = extractSkillName(filePath);
 
   if (skillName === null) return null;
@@ -188,13 +170,13 @@ export async function processToolUse(
     session_id: sessionId,
     skill_name: skillName,
     skill_path: filePath,
-    ...(skillVersionHash ? { skill_version_hash: skillVersionHash } : {}),
     ...skillPathMetadata,
     query,
     triggered: wasInvoked,
     invocation_type: "contextual",
     source: "claude_code",
   };
+  if (skillVersionHash) record.skill_version_hash = skillVersionHash;
 
   const baseInput: CanonicalBaseInput = {
     platform: "claude_code",
@@ -307,12 +289,14 @@ function detectAgentType(transcriptPath: string): string {
     if (!/[/\\]subagents[/\\]/.test(transcriptPath)) return "main";
     const metaPath = transcriptPath.replace(/\.jsonl$/, ".meta.json");
     if (existsSync(metaPath)) {
-      const meta: unknown = JSON.parse(readFileSync(metaPath, "utf-8"));
-      const agentType =
-        typeof meta === "object" && meta !== null
-          ? (meta as Record<string, unknown>).agentType
-          : undefined;
-      return typeof agentType === "string" ? agentType : "subagent";
+      const meta = Schema.decodeUnknownOption(
+        Schema.fromJsonString(
+          Schema.Struct({
+            agentType: Schema.optionalKey(Schema.String),
+          }),
+        ),
+      )(readFileSync(metaPath, "utf-8"));
+      return Option.isSome(meta) ? (meta.value.agentType ?? "subagent") : "subagent";
     }
     return "subagent";
   } catch {
@@ -326,8 +310,7 @@ async function processSkillToolUse(
   canonicalLogPath: string,
   promptStatePath?: string,
 ): Promise<SkillUsageRecord | null> {
-  const rawSkill = payload.tool_input?.skill;
-  const skillName = typeof rawSkill === "string" ? rawSkill : null;
+  const skillName = decodeTranscriptToolInput(payload.tool_input).skill;
   if (!skillName) return null;
 
   const transcriptPath = payload.transcript_path ?? "";
@@ -422,7 +405,7 @@ export async function runSkillEvalHook(rawStdin: string): Promise<HookExecutionR
       return SILENT_HOOK_SUCCESS;
     }
 
-    const payload: PostToolUsePayload = JSON.parse(rawStdin);
+    const payload = Schema.decodeUnknownSync(Schema.fromJsonString(PostToolUsePayload))(rawStdin);
     await processToolUse(payload);
   } catch {
     // silent — hooks must never block Claude

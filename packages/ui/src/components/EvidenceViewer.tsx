@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Badge } from "../primitives/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "../primitives/card";
-import type { EvidenceEntry, EvolutionEntry } from "../types";
+import type { EvidenceCase, EvidenceEntry, EvidenceValidation, EvolutionEntry } from "../types";
 import { formatRate, timeAgo } from "../lib/format";
 import {
   ChevronDownIcon,
@@ -96,88 +96,27 @@ function SkillContentBlock({
   );
 }
 
-/** Smart formatting for a single validation value */
-function formatValidationValue(key: string, val: unknown): React.ReactNode {
-  // Booleans
-  if (typeof val === "boolean") {
-    return val ? (
-      <span className="inline-block size-2 rounded-full bg-primary align-middle" />
-    ) : (
-      <span className="inline-block size-2 rounded-full bg-destructive align-middle" />
-    );
-  }
-  // Numbers that look like rates (0-1 range, or key contains "rate"/"change")
-  if (typeof val === "number") {
-    const isRate =
-      key.includes("rate") || key.includes("change") || (val >= -1 && val <= 1 && key !== "count");
-    if (isRate) {
-      const pct = (val * 100).toFixed(1);
-      const prefix = val > 0 && key.includes("change") ? "+" : "";
-      return (
-        <span className="font-mono">
-          {prefix}
-          {pct}%
-        </span>
-      );
-    }
-    return <span className="font-mono">{val}</span>;
-  }
-  // null/undefined
-  if (val === null || val === undefined) return <span className="text-muted-foreground">--</span>;
-  // Strings
-  if (typeof val === "string") return <span>{val}</span>;
-  // Arrays — render as list of items
-  if (Array.isArray(val)) {
-    if (val.length === 0) return <span className="text-muted-foreground italic">none</span>;
-    return <span className="font-mono">{val.length} entries</span>;
-  }
-  // Objects
-  if (typeof val === "object") return <span className="font-mono">1 entry</span>;
-  return <span>{String(val)}</span>;
+function getPerEntryPassStatus(entry: EvidenceCase): boolean | null {
+  return (
+    entry.after_pass ??
+    entry.after ??
+    entry.triggered ??
+    entry.result ??
+    entry.passed ??
+    entry.matched ??
+    null
+  );
 }
 
-function getPerEntryPassStatus(entry: unknown): boolean | null {
-  if (typeof entry !== "object" || entry === null) return null;
-  const obj = entry as Record<string, unknown>;
-  const afterPass = obj.after_pass ?? obj.after ?? obj.triggered ?? obj.result;
-  const passed = obj.passed ?? obj.matched;
-  return typeof afterPass === "boolean" ? afterPass : typeof passed === "boolean" ? passed : null;
-}
-
-function getEvidenceListKey(prefix: string, value: unknown): string {
-  if (typeof value !== "object" || value === null) {
-    return `${prefix}:${JSON.stringify(value)}`;
-  }
-
-  const record = value as Record<string, unknown>;
-  const nested =
-    typeof record.entry === "object" && record.entry !== null
-      ? (record.entry as Record<string, unknown>)
-      : null;
-  const query =
-    typeof nested?.query === "string"
-      ? nested.query
-      : typeof record.query === "string"
-        ? record.query
-        : typeof record.prompt === "string"
-          ? record.prompt
-          : typeof record.input === "string"
-            ? record.input
-            : null;
-
-  if (query) return `${prefix}:${query}`;
-
-  const action = typeof record.action === "string" ? record.action : null;
-  const timestamp = typeof record.timestamp === "string" ? record.timestamp : null;
-  if (action && timestamp) return `${prefix}:${action}:${timestamp}`;
-
-  return `${prefix}:${JSON.stringify(record)}`;
+function getEvidenceListKey(prefix: string, entry: EvidenceCase): string {
+  const query = entry.entry?.query ?? entry.query ?? entry.prompt ?? entry.input ?? entry.text;
+  return `${prefix}:${query || JSON.stringify(entry)}`;
 }
 
 /** Render a per_entry_result row — handles both flat EvalEntry and nested { entry, before_pass, after_pass } */
-function PerEntryResult({ entry }: { entry: Record<string, unknown> }) {
+function PerEntryResult({ entry }: { entry: EvidenceCase }) {
   // Handle nested shape: { entry: { query, should_trigger }, before_pass, after_pass }
-  const nested = entry.entry as Record<string, unknown> | undefined;
+  const nested = entry.entry;
   const query = nested?.query ?? entry.query ?? entry.prompt ?? entry.input ?? entry.text;
   const shouldTrigger = nested?.should_trigger ?? entry.should_trigger;
   const invocationType = nested?.invocation_type ?? entry.invocation_type;
@@ -201,7 +140,7 @@ function PerEntryResult({ entry }: { entry: Record<string, unknown> }) {
         {query ? String(query) : JSON.stringify(entry)}
       </span>
       <div className="flex items-center gap-1.5 shrink-0">
-        {typeof beforePass === "boolean" && typeof afterPass === "boolean" && (
+        {beforePass != null && afterPass != null && (
           <span className="text-[10px] text-muted-foreground font-mono">
             {beforePass ? "pass" : "fail"} &rarr; {afterPass ? "pass" : "fail"}
           </span>
@@ -221,7 +160,7 @@ function PerEntryResult({ entry }: { entry: Record<string, unknown> }) {
   );
 }
 
-function ValidationResults({ validation }: { validation: Record<string, unknown> }) {
+function ValidationResults({ validation }: { validation: EvidenceValidation }) {
   const {
     improved,
     before_pass_rate,
@@ -234,18 +173,24 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
     validation_agent,
     validation_fixture_id,
     validation_fallback_reason,
-    ...rest
+    gates_passed,
+    gates_total,
+    gate_results,
+    before_entry_results,
+    validation_evidence_ref,
+    total,
+    passed,
+    failed,
+    pass_rate,
   } = validation;
 
-  const regressionsArr = Array.isArray(regressions) ? regressions : [];
-  const newPassesArr = Array.isArray(new_passes) ? new_passes : [];
-  const perEntryArr = Array.isArray(per_entry_results) ? per_entry_results : [];
-  const validationMode = typeof validation_mode === "string" ? validation_mode : null;
-  const validationAgent = typeof validation_agent === "string" ? validation_agent : null;
-  const validationFixtureId =
-    typeof validation_fixture_id === "string" ? validation_fixture_id : null;
-  const validationFallbackReason =
-    typeof validation_fallback_reason === "string" ? validation_fallback_reason : null;
+  const regressionsArr = regressions ?? [];
+  const newPassesArr = new_passes ?? [];
+  const perEntryArr = per_entry_results ?? [];
+  const validationMode = validation_mode;
+  const validationAgent = validation_agent;
+  const validationFixtureId = validation_fixture_id;
+  const validationFallbackReason = validation_fallback_reason;
 
   return (
     <div className="rounded-md border bg-muted/30 p-3 space-y-3">
@@ -258,7 +203,7 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
 
       {/* Summary bar */}
       <div className="flex items-center gap-3 flex-wrap">
-        {improved !== undefined && (
+        {improved != null && (
           <Badge variant={improved ? "default" : "destructive"} className="text-[10px]">
             {improved ? "Improved" : "Regressed"}
           </Badge>
@@ -278,12 +223,12 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
             fixture #{validationFixtureId.slice(0, 8)}
           </Badge>
         )}
-        {typeof before_pass_rate === "number" && typeof after_pass_rate === "number" && (
+        {before_pass_rate != null && after_pass_rate != null && (
           <span className="text-xs font-mono text-muted-foreground">
             {(before_pass_rate * 100).toFixed(1)}% &rarr; {(after_pass_rate * 100).toFixed(1)}%
           </span>
         )}
-        {typeof net_change === "number" && (
+        {net_change != null && (
           <span
             className={`text-xs font-mono font-semibold ${net_change > 0 ? "text-primary" : "text-destructive"}`}
           >
@@ -307,14 +252,7 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
           </p>
           <div className="rounded border bg-card p-2">
             {newPassesArr.map((entry) => (
-              <PerEntryResult
-                key={getEvidenceListKey("new-pass", entry)}
-                entry={
-                  typeof entry === "object" && entry !== null
-                    ? (entry as Record<string, unknown>)
-                    : { value: entry }
-                }
-              />
+              <PerEntryResult key={getEvidenceListKey("new-pass", entry)} entry={entry} />
             ))}
           </div>
         </div>
@@ -328,14 +266,7 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
           </p>
           <div className="rounded border border-destructive/20 bg-card p-2">
             {regressionsArr.map((entry) => (
-              <PerEntryResult
-                key={getEvidenceListKey("regression", entry)}
-                entry={
-                  typeof entry === "object" && entry !== null
-                    ? (entry as Record<string, unknown>)
-                    : { value: entry }
-                }
-              />
+              <PerEntryResult key={getEvidenceListKey("regression", entry)} entry={entry} />
             ))}
           </div>
         </div>
@@ -344,22 +275,39 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
       {/* Per-entry results (collapsible if many) */}
       {perEntryArr.length > 0 && <PerEntryResultsSection entries={perEntryArr} />}
 
-      {/* Any remaining keys */}
-      {Object.keys(rest).length > 0 && (
-        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-          {Object.entries(rest).map(([key, val]) => (
-            <div key={key} className="contents">
-              <span className="font-mono text-muted-foreground">{key}</span>
-              <span className="text-foreground">{formatValidationValue(key, val)}</span>
-            </div>
-          ))}
-        </div>
+      {before_entry_results && before_entry_results.length > 0 && (
+        <PerEntryResultsSection entries={before_entry_results} label="Baseline Test Cases" />
+      )}
+      {(gates_passed != null || gates_total != null) && (
+        <p className="text-xs text-muted-foreground">
+          Gates passed: {gates_passed ?? "—"} / {gates_total ?? "—"}
+        </p>
+      )}
+      {gate_results?.map((gate, index) => (
+        <p key={`${gate.gate}:${index}`} className="text-xs">
+          {gate.gate}: {gate.passed ? "passed" : "failed"} — {gate.reason}
+        </p>
+      ))}
+      {pass_rate != null && <p className="text-xs">Pass rate: {formatRate(pass_rate)}</p>}
+      {(total != null || passed != null || failed != null) && (
+        <p className="text-xs">
+          Total: {total ?? "—"} · Passed: {passed ?? "—"} · Failed: {failed ?? "—"}
+        </p>
+      )}
+      {validation_evidence_ref && (
+        <p className="text-xs break-all">Evidence reference: {validation_evidence_ref}</p>
       )}
     </div>
   );
 }
 
-function PerEntryResultsSection({ entries }: { entries: unknown[] }) {
+function PerEntryResultsSection({
+  entries,
+  label = "Individual Test Cases",
+}: {
+  entries: readonly EvidenceCase[];
+  label?: string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const passCount = entries.filter((entry) => getPerEntryPassStatus(entry) === true).length;
 
@@ -369,7 +317,7 @@ function PerEntryResultsSection({ entries }: { entries: unknown[] }) {
     <div>
       <div className="flex items-center justify-between mb-1">
         <p className="text-[11px] font-medium text-muted-foreground">
-          Individual Test Cases ({passCount}/{entries.length} passed)
+          {label} ({passCount}/{entries.length} passed)
         </p>
         {entries.length > 5 && (
           <button
@@ -392,14 +340,7 @@ function PerEntryResultsSection({ entries }: { entries: unknown[] }) {
       </div>
       <div className="rounded border bg-card p-2 max-h-[300px] overflow-y-auto">
         {display.map((entry) => (
-          <PerEntryResult
-            key={getEvidenceListKey("per-entry", entry)}
-            entry={
-              typeof entry === "object" && entry !== null
-                ? (entry as Record<string, unknown>)
-                : { value: entry }
-            }
-          />
+          <PerEntryResult key={getEvidenceListKey("per-entry", entry)} entry={entry} />
         ))}
       </div>
     </div>
@@ -410,7 +351,7 @@ function PerEntryResultsSection({ entries }: { entries: unknown[] }) {
 function getAfterPassRate(entry: EvidenceEntry): number | null {
   if (!entry.validation) return null;
   const rate = entry.validation.after_pass_rate;
-  return typeof rate === "number" ? rate : null;
+  return rate ?? null;
 }
 
 /** Render a delta badge between two pass rates, returns null if not computable */
@@ -430,7 +371,7 @@ function DeltaBadge({ prev, curr }: { prev: number | null; curr: number | null }
   );
 }
 
-function EvalSetSection({ evalSet }: { evalSet: Array<Record<string, unknown>> }) {
+function EvalSetSection({ evalSet }: { evalSet: readonly EvidenceCase[] }) {
   const [expanded, setExpanded] = useState(false);
   const passCount = evalSet.filter((e) => {
     const passed = e.passed ?? e.result;
@@ -465,7 +406,7 @@ function EvalSetSection({ evalSet }: { evalSet: Array<Record<string, unknown>> }
                 key={getEvidenceListKey("eval-set", evalEntry)}
                 className="flex items-start gap-2 text-xs py-1 border-b border-border/50 last:border-0"
               >
-                {typeof passed === "boolean" ? (
+                {passed != null ? (
                   passed ? (
                     <span className="mt-1 size-2 shrink-0 rounded-full bg-primary" />
                   ) : (
@@ -576,6 +517,12 @@ function EvidenceCard({
         {/* Eval set — test cases used for validation (collapsible) */}
         {entry.eval_set && entry.eval_set.length > 0 && <EvalSetSection evalSet={entry.eval_set} />}
 
+        {entry.evidence_error && (
+          <p role="alert" className="rounded border border-warning/60 bg-warning/10 p-3 text-xs">
+            {entry.evidence_error}
+          </p>
+        )}
+
         {/* Validation details */}
         {entry.validation && Object.keys(entry.validation).length > 0 && (
           <ValidationResults validation={entry.validation} />
@@ -614,7 +561,7 @@ function CollapsedEvidenceCard({
             {(passRate * 100).toFixed(1)}% pass rate
           </span>
         )}
-        {typeof improved === "boolean" && (
+        {improved != null && (
           <Badge variant={improved ? "default" : "destructive"} className="text-[9px]">
             {improved ? "Improved" : "Regressed"}
           </Badge>

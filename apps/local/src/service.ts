@@ -14,20 +14,24 @@ import {
 } from "./daemon.js";
 import { runServiceProcess as runCancellableServiceProcess } from "./service-process.js";
 import { prepareServiceDirectories } from "./service/directories.js";
-import { makeLaunchdBackend } from "./service/launchd/backend.js";
-import { makeSystemdBackend } from "./service/systemd/backend.js";
-import { makeLiveWindowsServiceBackend } from "./service/windows/backend.js";
+import { makeLaunchdBackendLayer } from "./service/launchd/backend.js";
+import { makeSystemdBackendLayer } from "./service/systemd/backend.js";
+import {
+  makeLiveWindowsServiceBackendLayer,
+  WindowsBackendProvider,
+} from "./service/windows/backend.js";
 import { runWindowsServiceCommand } from "./service/windows/orchestration.js";
-import { makeLiveWindowsRuntimeRecovery } from "./service/windows/runtime/live.js";
+import { makeWindowsRuntimeRecoveryLayer } from "./service/windows/runtime/live.js";
 import { observeWindowsServiceStatus } from "./service/windows/status.js";
 import {
   ServiceManager,
+  ServiceBackendProvider,
+  WindowsRuntimeRecoveryProvider,
   serviceFailure,
   type ServiceBackend,
   type ServiceCommandResponse,
   type ServiceDescriptor,
   type ServiceStatus,
-  type WindowsServiceBackend,
 } from "./service-contract.js";
 
 export { serviceEnvironment, serviceProgramArguments } from "./service-definition.js";
@@ -74,11 +78,11 @@ const runCommand = Effect.fn("SelfTuneService.runCommand")(function* (
 export const runServiceProcess = runCommand;
 
 function currentUid(): number {
-  return typeof process.getuid === "function" ? process.getuid() : userInfo().uid;
+  return process.getuid?.() ?? userInfo().uid;
 }
 
-function makeWindowsBackend(): WindowsServiceBackend {
-  return makeLiveWindowsServiceBackend({
+function makeWindowsBackendLayer() {
+  const windows = makeLiveWindowsServiceBackendLayer({
     prepareDirectories: (configDir) =>
       Effect.try({
         try: () => prepareServiceDirectories(configDir),
@@ -87,6 +91,9 @@ function makeWindowsBackend(): WindowsServiceBackend {
     run: runCommand,
     systemRoot: process.env.SystemRoot,
   });
+  return Layer.effect(ServiceBackendProvider)(Effect.service(WindowsBackendProvider)).pipe(
+    Layer.provide(windows),
+  );
 }
 
 function makeUnsupportedBackend(platform: NodeJS.Platform): ServiceBackend {
@@ -113,16 +120,16 @@ function makeUnsupportedBackend(platform: NodeJS.Platform): ServiceBackend {
   };
 }
 
-export function getServiceBackend(platform: NodeJS.Platform = process.platform): ServiceBackend {
+export function getServiceBackendLayer(platform: NodeJS.Platform = process.platform) {
   switch (platform) {
     case "darwin":
-      return makeLaunchdBackend({
+      return makeLaunchdBackendLayer({
         homeDirectory: homedir(),
         run: runCommand,
         uid: currentUid(),
       });
     case "linux":
-      return makeSystemdBackend({
+      return makeSystemdBackendLayer({
         homeDirectory: homedir(),
         run: runCommand,
         uid: currentUid(),
@@ -131,20 +138,30 @@ export function getServiceBackend(platform: NodeJS.Platform = process.platform):
         xdgRuntimeDir: process.env.XDG_RUNTIME_DIR,
       });
     case "win32":
-      return makeWindowsBackend();
+      return makeWindowsBackendLayer();
     default:
-      return makeUnsupportedBackend(platform);
+      return Layer.succeed(ServiceBackendProvider)(makeUnsupportedBackend(platform));
   }
 }
 
-export const ServiceManagerLive = Layer.succeed(ServiceManager)({
-  backend: getServiceBackend(),
-  runtime: {
-    status: getDaemonStatus,
-    stop: stopDaemon,
-  },
-  windowsRecovery: makeLiveWindowsRuntimeRecovery(runCommand),
-});
+/** Synchronous adapter for callers outside the managed service runtime. */
+export function getServiceBackend(platform: NodeJS.Platform = process.platform): ServiceBackend {
+  return Effect.runSync(
+    Effect.service(ServiceBackendProvider).pipe(Effect.provide(getServiceBackendLayer(platform))),
+  );
+}
+
+const ServiceDependenciesLive = Layer.mergeAll(
+  getServiceBackendLayer(),
+  makeWindowsRuntimeRecoveryLayer(runCommand),
+);
+export const ServiceManagerLive = Layer.effect(ServiceManager)(
+  Effect.gen(function* () {
+    const backend = yield* ServiceBackendProvider;
+    const windowsRecovery = yield* WindowsRuntimeRecoveryProvider;
+    return { backend, runtime: { status: getDaemonStatus, stop: stopDaemon }, windowsRecovery };
+  }),
+).pipe(Layer.provide(ServiceDependenciesLive));
 
 function withManifestDetail(status: ServiceStatus, daemon: DaemonStatus): ServiceStatus {
   const manifest = daemon.manifest;

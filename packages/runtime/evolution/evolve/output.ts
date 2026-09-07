@@ -12,23 +12,22 @@ export function createAuditEntry(
     "validation_mode" | "validation_agent" | "validation_fixture_id" | "validation_evidence_ref"
   >,
 ): EvolutionAuditEntry {
-  return {
+  const entry: EvolutionAuditEntry = {
     timestamp: new Date().toISOString(),
     proposal_id: proposalId,
     action,
     details,
-    ...(skillName ? { skill_name: skillName } : {}),
-    ...(evalSnapshot ? { eval_snapshot: evalSnapshot } : {}),
-    ...(iterationsUsed != null ? { iterations_used: iterationsUsed } : {}),
-    ...(provenance?.validation_mode ? { validation_mode: provenance.validation_mode } : {}),
-    ...(provenance?.validation_agent ? { validation_agent: provenance.validation_agent } : {}),
-    ...(provenance?.validation_fixture_id
-      ? { validation_fixture_id: provenance.validation_fixture_id }
-      : {}),
-    ...(provenance?.validation_evidence_ref
-      ? { validation_evidence_ref: provenance.validation_evidence_ref }
-      : {}),
   };
+  if (skillName) entry.skill_name = skillName;
+  if (evalSnapshot) entry.eval_snapshot = evalSnapshot;
+  if (iterationsUsed != null) entry.iterations_used = iterationsUsed;
+  if (provenance?.validation_mode) entry.validation_mode = provenance.validation_mode;
+  if (provenance?.validation_agent) entry.validation_agent = provenance.validation_agent;
+  if (provenance?.validation_fixture_id)
+    entry.validation_fixture_id = provenance.validation_fixture_id;
+  if (provenance?.validation_evidence_ref)
+    entry.validation_evidence_ref = provenance.validation_evidence_ref;
+  return entry;
 }
 
 export function formatSimpleDiff(oldText: string, newText: string): string {

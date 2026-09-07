@@ -7,7 +7,19 @@ interface ValidatorCommand {
 
 export interface ValidateAgentSkillDeps {
   which?: (command: string) => string | null;
-  spawnSync?: typeof Bun.spawnSync;
+  spawnSync?: (
+    argv: string[],
+    options: {
+      cwd: string;
+      stdout: "pipe";
+      stderr: "pipe";
+      env: NodeJS.ProcessEnv;
+    },
+  ) => {
+    stdout: Uint8Array;
+    stderr: Uint8Array;
+    exitCode: number | null;
+  };
 }
 
 const VALIDATOR_COMMANDS: readonly ValidatorCommand[] = [
@@ -65,12 +77,6 @@ function normalizeIssues(
   }));
 }
 
-function readSpawnText(output: unknown): string {
-  if (typeof output === "string") return output;
-  if (output == null) return "";
-  return Buffer.from(output as ArrayBufferLike).toString("utf-8");
-}
-
 function isValidatorInvocationFailure(
   stdout: string,
   stderr: string,
@@ -101,7 +107,8 @@ export async function validateAgentSkill(
   deps: ValidateAgentSkillDeps = {},
 ): Promise<AgentSkillValidationResult> {
   const which = deps.which ?? ((command: string) => Bun.which(command));
-  const spawnSync = deps.spawnSync ?? Bun.spawnSync;
+  const spawnSync: NonNullable<ValidateAgentSkillDeps["spawnSync"]> =
+    deps.spawnSync ?? ((command, options) => Bun.spawnSync(command, options));
 
   const candidates = VALIDATOR_COMMANDS.filter((option) => which(option.argv[0]) != null);
   if (candidates.length === 0) {
@@ -133,8 +140,8 @@ export async function validateAgentSkill(
       env: process.env,
     });
 
-    const stdout = readSpawnText(result.stdout);
-    const stderr = readSpawnText(result.stderr);
+    const stdout = Buffer.from(result.stdout).toString("utf-8");
+    const stderr = Buffer.from(result.stderr).toString("utf-8");
     const exitCode = result.exitCode;
     const issues = normalizeIssues(stdout, stderr, exitCode);
     const response: AgentSkillValidationResult = {

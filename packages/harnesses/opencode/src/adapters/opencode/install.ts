@@ -31,6 +31,9 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { findSelftunePackageRoot } from "@selftune/runtime/package-root";
+import * as Schema from "effect/Schema";
+
+import { OpenCodeConfig, type OpenCodeAgentConfig } from "./config.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -134,24 +137,8 @@ export const SelftunePlugin = async ({ $ }) => {
 // Config helpers
 // ---------------------------------------------------------------------------
 
-interface OpenCodeAgentConfig {
-  description?: string;
-  name?: string;
-  mode?: string;
-  model?: string;
-  prompt?: string;
-  tools?: Record<string, boolean>;
-}
-
-interface OpenCodeConfig {
-  agent?: Record<string, OpenCodeAgentConfig>;
-  plugin?: string[];
-  [key: string]: unknown;
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
+const JsonObject = Schema.Record(Schema.String, Schema.Json);
 
 function detectConfigPath(): string {
   const projectConfig = getProjectConfigPath();
@@ -161,22 +148,28 @@ function detectConfigPath(): string {
 
 function readConfig(configPath: string): OpenCodeConfig {
   if (!existsSync(configPath)) return {};
-  let parsed: unknown;
+  let parsed: Schema.Json;
   try {
-    parsed = JSON.parse(readFileSync(configPath, "utf-8"));
+    parsed = decodeJson(readFileSync(configPath, "utf-8"));
   } catch {
     throw new Error(
       `OpenCode config at ${configPath} is not valid JSON; refusing to overwrite it.`,
     );
   }
 
-  if (!isPlainRecord(parsed)) {
+  if (!Schema.is(JsonObject)(parsed)) {
     throw new Error(
       `OpenCode config at ${configPath} must be a JSON object; refusing to overwrite it.`,
     );
   }
 
-  return parsed as OpenCodeConfig;
+  try {
+    return Schema.decodeUnknownSync(OpenCodeConfig)(parsed);
+  } catch {
+    throw new Error(
+      `OpenCode config at ${configPath} has invalid agent or plugin fields; refusing to overwrite it.`,
+    );
+  }
 }
 
 function writeConfig(configPath: string, config: OpenCodeConfig): void {
@@ -227,8 +220,8 @@ Options:
 // ---------------------------------------------------------------------------
 
 /** Map Claude Code tool names to OpenCode tool permissions. */
-function mapToolPermissions(tools?: string[], disallowed?: string[]): Record<string, boolean> {
-  const defaults: Record<string, boolean> = {
+function mapToolPermissions(tools?: string[], disallowed?: string[]) {
+  const defaults = {
     write: false,
     edit: false,
     bash: true,
@@ -250,11 +243,11 @@ function mapToolPermissions(tools?: string[], disallowed?: string[]): Record<str
 }
 
 /** OpenCode model format (provider/model). */
-const OPENCODE_MODEL_MAP: Record<string, string> = {
-  haiku: "anthropic/claude-haiku-4-5-20251001",
-  sonnet: "anthropic/claude-sonnet-4-20250514",
-  opus: "anthropic/claude-opus-4-20250514",
-};
+const OPENCODE_MODEL_MAP = new Map([
+  ["haiku", "anthropic/claude-haiku-4-5-20251001"],
+  ["sonnet", "anthropic/claude-sonnet-4-20250514"],
+  ["opus", "anthropic/claude-opus-4-20250514"],
+]);
 
 interface AgentFrontmatter {
   name: string;
@@ -295,15 +288,11 @@ const BUNDLED_AGENT_DIR = join(findSelftunePackageRoot(), "skill", "agents");
 
 /** Check if an agent entry was created by selftune. */
 function isSelftuneAgent(entry: OpenCodeAgentConfig): boolean {
-  return (
-    typeof entry.description === "string" && entry.description.startsWith(SELFTUNE_AGENT_PREFIX)
-  );
+  return entry.description?.startsWith(SELFTUNE_AGENT_PREFIX) ?? false;
 }
 
 /** Discover agent definitions from skill/agents/ and build OpenCode agent config entries. */
-export function buildAgentEntries(
-  agentsDir: string = BUNDLED_AGENT_DIR,
-): Record<string, OpenCodeAgentConfig> {
+export function buildAgentEntries(agentsDir: string = BUNDLED_AGENT_DIR) {
   const entries: Record<string, OpenCodeAgentConfig> = {};
 
   if (!existsSync(agentsDir)) return entries;
@@ -319,13 +308,14 @@ export function buildAgentEntries(
     // Strip frontmatter to get the body as the prompt
     const body = content.replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
 
-    entries[fm.name] = {
+    const entry: OpenCodeAgentConfig = {
       description: `${SELFTUNE_AGENT_PREFIX} ${fm.description ?? fm.name}`,
       mode: "subagent",
-      model: fm.model ? (OPENCODE_MODEL_MAP[fm.model] ?? fm.model) : undefined,
       prompt: body,
       tools: mapToolPermissions(fm.tools, fm.disallowedTools),
     };
+    if (fm.model) entry.model = OPENCODE_MODEL_MAP.get(fm.model) ?? fm.model;
+    entries[fm.name] = entry;
   }
 
   return entries;
@@ -401,7 +391,7 @@ function doInstall(options: InstallOptions): void {
   }
 
   // Clean up any legacy plugin array entries from previous installer versions
-  if (Array.isArray(config.plugin)) {
+  if (config.plugin) {
     const before = config.plugin.length;
     config.plugin = config.plugin.filter((p) => !p.includes(PLUGIN_FILENAME));
     if (config.plugin.length === 0) {
@@ -442,7 +432,7 @@ function doUninstall(options: InstallOptions): void {
     let changed = false;
 
     // Remove legacy plugin array entries
-    if (Array.isArray(config.plugin)) {
+    if (config.plugin) {
       const before = config.plugin.length;
       config.plugin = config.plugin.filter((p) => !p.includes(PLUGIN_FILENAME));
       if (config.plugin.length === 0) {
@@ -492,7 +482,9 @@ function doUninstall(options: InstallOptions): void {
   const legacyConfig = join(dirname(getUserConfigPath()), "config.json");
   if (existsSync(legacyConfig)) {
     try {
-      const content = JSON.parse(readFileSync(legacyConfig, "utf-8"));
+      const content = Schema.decodeUnknownSync(Schema.fromJsonString(JsonObject))(
+        readFileSync(legacyConfig, "utf-8"),
+      );
       // Only remove if it looks like our leftover (tiny file with just autoupdate/schema)
       const keys = Object.keys(content).filter((k) => k !== "$schema");
       if (keys.length <= 1 && (keys[0] === "autoupdate" || keys.length === 0)) {

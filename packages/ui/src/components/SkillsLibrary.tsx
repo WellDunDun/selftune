@@ -95,10 +95,7 @@ function isFilterTab(value: string): value is FilterTab {
   return FILTER_TABS.some((tab) => tab.key === value);
 }
 
-const STATUS_STYLE: Record<
-  SkillHealthStatus,
-  { tone: StatusTone; accentText: string; accentBg: string; label: string }
-> = {
+const STATUS_STYLE = {
   HEALTHY: {
     tone: "healthy",
     accentText: "text-primary",
@@ -129,7 +126,10 @@ const STATUS_STYLE: Record<
     accentBg: "bg-muted-foreground",
     label: "Unknown",
   },
-};
+} satisfies Record<
+  SkillHealthStatus,
+  { tone: StatusTone; accentText: string; accentBg: string; label: string }
+>;
 
 function getPassRatePercent(passRate: number | null): number {
   return passRate !== null ? Math.round(passRate * 100) : 0;

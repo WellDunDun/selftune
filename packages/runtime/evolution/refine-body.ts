@@ -6,7 +6,9 @@
  */
 
 import type { BodyEvolutionProposal, BodyValidationResult } from "../types.js";
-import { type EffortLevel, callLlm, stripMarkdownFences } from "../utils/llm-call.js";
+import * as Schema from "effect/Schema";
+import { type EffortLevel, callLlm } from "../utils/llm-call.js";
+import { decodeProposalResponse } from "./proposal-response.js";
 
 // ---------------------------------------------------------------------------
 // System prompt
@@ -69,43 +71,14 @@ Revise the proposed body to address the failed validation gates. Preserve what w
 // ---------------------------------------------------------------------------
 
 /** Parse LLM response text into structured refinement data. */
-export function parseRefinementResponse(raw: string): {
-  refined_body: string;
-  changes_made: string;
-  confidence: number;
-} {
-  const cleaned = stripMarkdownFences(raw);
+const RefinementResponse = Schema.Struct({
+  refined_body: Schema.String,
+  changes_made: Schema.String,
+  confidence: Schema.Number,
+});
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error(`Failed to parse LLM response as JSON: ${cleaned.slice(0, 200)}`);
-  }
-
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error("LLM response is not a JSON object");
-  }
-
-  const obj = parsed as Record<string, unknown>;
-
-  if (typeof obj.refined_body !== "string") {
-    throw new Error("Missing or invalid 'refined_body' field in LLM response");
-  }
-  if (typeof obj.changes_made !== "string") {
-    throw new Error("Missing or invalid 'changes_made' field in LLM response");
-  }
-  if (typeof obj.confidence !== "number") {
-    throw new Error("Missing or invalid 'confidence' field in LLM response");
-  }
-
-  const confidence = Math.max(0.0, Math.min(1.0, obj.confidence));
-
-  return {
-    refined_body: obj.refined_body,
-    changes_made: obj.changes_made,
-    confidence,
-  };
+export function parseRefinementResponse(raw: string) {
+  return decodeProposalResponse(raw, RefinementResponse);
 }
 
 // ---------------------------------------------------------------------------

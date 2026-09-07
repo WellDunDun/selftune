@@ -105,14 +105,11 @@ test("ingests only legacy correction phrasing as deferred, redacted E0 hypothese
   expect(drafts).toHaveLength(0);
   expect(candidates.every((candidate) => candidate.evidence_level === "E0")).toBe(true);
   expect(candidates.every((candidate) => candidate.lifecycle === "deferred")).toBe(true);
-  expect(
-    candidates.every((candidate) => {
-      const payload = JSON.parse(candidate.signal_payload_json) as {
-        skill: { pre_revision: string | null; post_revision: string | null };
-      };
-      return payload.skill.pre_revision === null && payload.skill.post_revision === null;
-    }),
-  ).toBe(true);
+  for (const candidate of candidates) {
+    expect(JSON.parse(candidate.signal_payload_json)).toMatchObject({
+      skill: { pre_revision: null, post_revision: null },
+    });
+  }
   expect(
     candidates.some(
       (candidate) => candidate.reason === "legacy_correction_ambiguous_skill_attribution",

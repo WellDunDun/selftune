@@ -119,11 +119,9 @@ async function invokeClaudeRuntimeReplay(
     throw new Error(combinedError || `claude runtime replay exited with code ${exitCode}`);
   }
 
-  return {
-    ...observation,
-    ...(latestMetrics ? { metrics: latestMetrics } : {}),
-    ...(combinedError ? { runtimeError: combinedError } : {}),
-  };
+  if (latestMetrics) observation.metrics = latestMetrics;
+  if (combinedError) observation.runtimeError = combinedError;
+  return observation;
 }
 
 async function invokeCodexRuntimeReplay(
@@ -169,10 +167,8 @@ async function invokeCodexRuntimeReplay(
     throw new Error(combinedError || `codex runtime replay exited with code ${exitCode}`);
   }
 
-  return {
-    ...observation,
-    ...(combinedError ? { runtimeError: combinedError } : {}),
-  };
+  if (combinedError) observation.runtimeError = combinedError;
+  return observation;
 }
 
 async function invokeOpenCodeRuntimeReplay(
@@ -213,10 +209,8 @@ async function invokeOpenCodeRuntimeReplay(
     throw new Error(combinedError || `opencode runtime replay exited with code ${exitCode}`);
   }
 
-  return {
-    ...observation,
-    ...(combinedError ? { runtimeError: combinedError } : {}),
-  };
+  if (combinedError) observation.runtimeError = combinedError;
+  return observation;
 }
 
 function evaluateRuntimeReplayObservation(
@@ -399,7 +393,7 @@ function evaluateReplayTrigger(
   routing: string,
   targetSurface: ReplaySkillSurface,
   competingSurfaces: ReplaySkillSurface[],
-): { triggered: boolean; evidence: string } {
+) {
   const normalizedQuery = query.trim();
   if (containsWholeSkillMention(normalizedQuery, targetSurface.skillName)) {
     return { triggered: true, evidence: `explicit target mention: ${targetSurface.skillName}` };
@@ -555,7 +549,7 @@ export async function runHostRuntimeReplayFixture(options: {
       });
 
       try {
-        const observation = await invokeRuntime({
+        const input: RuntimeReplayInvokerInput = {
           query: entry.query,
           platform: options.fixture.platform,
           workspaceRoot: workspace.rootDir,
@@ -563,9 +557,10 @@ export async function runHostRuntimeReplayFixture(options: {
           targetSkillName: options.fixture.target_skill_name,
           targetSkillPath: workspace.targetSkillPath,
           competingSkillPaths: workspace.competingSkillPaths,
-          ...(options.model ? { model: options.model } : {}),
-          ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
-        });
+        };
+        if (options.model) input.model = options.model;
+        if (options.reasoningEffort) input.reasoningEffort = options.reasoningEffort;
+        const observation = await invokeRuntime(input);
         const result = evaluateRuntimeReplayObservation(
           entry,
           options.fixture,

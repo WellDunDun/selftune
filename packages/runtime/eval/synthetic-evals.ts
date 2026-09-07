@@ -7,8 +7,9 @@
  */
 
 import { readFileSync } from "node:fs";
+import { Option, Schema } from "effect";
 
-import type { EvalEntry, InvocationType, QueryLogRecord, SkillUsageRecord } from "../types.js";
+import type { EvalEntry, InvocationType } from "../types.js";
 import { callLlm, stripMarkdownFences } from "../utils/llm-call.js";
 import type { LlmCallObserver } from "../utils/llm-call.js";
 import { extractActionableQueryText, extractPositiveEvalQueryText } from "../utils/query-filter.js";
@@ -31,11 +32,15 @@ export interface SyntheticEvalOptions {
   }) => LlmCallObserver | undefined;
 }
 
-interface RawSyntheticEntry {
-  query: string;
-  should_trigger: boolean;
-  invocation_type?: string;
-}
+const decodeSyntheticEntry = Schema.decodeUnknownOption(
+  Schema.Struct({
+    query: Schema.String,
+    should_trigger: Schema.Boolean,
+  }),
+);
+const decodeSyntheticEntries = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Array(Schema.Json)),
+);
 
 interface SyntheticPromptRealExamples {
   positive: string[];
@@ -351,7 +356,7 @@ export function buildSyntheticPrompt(
   maxNegatives: number,
   realExamples?: SyntheticPromptRealExamples,
   siblingSkills: string[] = [],
-): { system: string; user: string } {
+) {
   const summarizedSkillContent = summarizeSkillContentForSyntheticPrompt(skillContent);
   const {
     explicitCount,
@@ -437,7 +442,7 @@ export function buildSyntheticRefinementPrompt(
   maxPositives: number,
   maxNegatives: number,
   siblingSkills: string[] = [],
-): { system: string; user: string } {
+) {
   const summarizedSkillContent = summarizeSkillContentForSyntheticPrompt(skillContent);
   const targets = buildPromptFamilyTargets(maxPositives, maxNegatives, siblingSkills.length > 0);
   const system = `You are refining a cold-start eval benchmark for a coding agent skill.
@@ -520,22 +525,18 @@ export function parseSyntheticResponse(raw: string, skillName: string): EvalEntr
 
   const jsonText = text;
 
-  let entries: RawSyntheticEntry[];
+  let entries: readonly Schema.Json[];
   try {
-    entries = JSON.parse(jsonText);
+    entries = decodeSyntheticEntries(jsonText);
   } catch {
     throw new Error(`Failed to parse synthetic eval response as JSON: ${jsonText.slice(0, 200)}`);
   }
 
-  if (!Array.isArray(entries)) {
-    throw new Error("Synthetic eval response is not a JSON array");
-  }
-
   const result: EvalEntry[] = [];
-  for (const entry of entries) {
-    if (!entry || typeof entry.query !== "string" || typeof entry.should_trigger !== "boolean") {
-      continue;
-    }
+  for (const value of entries) {
+    const decoded = decodeSyntheticEntry(value);
+    if (Option.isNone(decoded)) continue;
+    const entry = decoded.value;
 
     const query = entry.query.trim();
     if (!query) continue;
@@ -589,17 +590,15 @@ export async function generateSyntheticEvals(
     const db = getDb();
 
     // Positives: high-confidence triggered records for this skill
-    const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+    const skillRecords = querySkillUsageRecords(db);
     const positiveCandidates = skillRecords
       .filter((r) => isHighConfidencePositiveSkillRecord(r, skillName))
       .map((r) => r.query)
-      .filter((q): q is string => typeof q === "string" && q.length > 0);
+      .filter((q) => q.length > 0);
 
     // Negatives: from all_queries, excluding cleaned positives later.
-    const allQueries = queryQueryLog(db) as QueryLogRecord[];
-    const negativeCandidates = allQueries
-      .map((r) => r.query)
-      .filter((q): q is string => typeof q === "string" && q.length > 0);
+    const allQueries = queryQueryLog(db);
+    const negativeCandidates = allQueries.map((r) => r.query).filter((q) => q.length > 0);
 
     realExamples = buildSyntheticPromptRealExamples(
       positiveCandidates,

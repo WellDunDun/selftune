@@ -18,7 +18,7 @@ export function getExecutionMetrics(db: Database, sessionIds: string[]): Executi
 
   const placeholders = sessionIds.map(() => "?").join(",");
   const row = db
-    .query(
+    .query<Omit<ExecutionMetrics, "session_type_distribution">, string[]>(
       `SELECT
          COALESCE(AVG(files_changed), 0) AS avg_files_changed,
          COALESCE(SUM(lines_added), 0) AS total_lines_added,
@@ -31,25 +31,16 @@ export function getExecutionMetrics(db: Database, sessionIds: string[]): Executi
        FROM execution_facts
        WHERE session_id IN (${placeholders})`,
     )
-    .get(...sessionIds) as {
-    avg_files_changed: number;
-    total_lines_added: number;
-    total_lines_removed: number;
-    total_cost_usd: number;
-    avg_cost_usd: number;
-    cached_input_tokens_total: number;
-    reasoning_output_tokens_total: number;
-    artifact_count: number;
-  } | null;
+    .get(...sessionIds);
 
   const typeRows = db
-    .query(
+    .query<{ session_type: string; count: number }, string[]>(
       `SELECT session_type, COUNT(*) AS count
        FROM execution_facts
        WHERE session_id IN (${placeholders}) AND session_type IS NOT NULL
        GROUP BY session_type`,
     )
-    .all(...sessionIds) as Array<{ session_type: string; count: number }>;
+    .all(...sessionIds);
 
   const session_type_distribution: Record<string, number> = {};
   for (const rowEntry of typeRows) {
@@ -71,13 +62,13 @@ export function getExecutionMetrics(db: Database, sessionIds: string[]): Executi
 
 export function getSessionCommits(db: Database, sessionId: string): CommitRecord[] {
   return db
-    .query(
+    .query<CommitRecord, [string]>(
       `SELECT commit_sha, commit_title, branch, repo_remote, timestamp
        FROM commit_tracking
        WHERE session_id = ?
        ORDER BY timestamp DESC`,
     )
-    .all(sessionId) as CommitRecord[];
+    .all(sessionId);
 }
 
 export function getSkillCommitSummary(db: Database, skillName: string): CommitSummary {
@@ -88,7 +79,7 @@ export function getSkillCommitSummary(db: Database, skillName: string): CommitSu
   };
 
   const statsRow = db
-    .query(
+    .query<Pick<CommitSummary, "total_commits" | "unique_branches">, [string]>(
       `WITH skill_sessions AS (
          SELECT DISTINCT session_id FROM skill_invocations WHERE skill_name = ?
        )
@@ -98,12 +89,12 @@ export function getSkillCommitSummary(db: Database, skillName: string): CommitSu
        FROM commit_tracking ct
        WHERE ct.session_id IN (SELECT session_id FROM skill_sessions)`,
     )
-    .get(skillName) as { total_commits: number; unique_branches: number } | null;
+    .get(skillName);
 
   if (!statsRow || statsRow.total_commits === 0) return empty;
 
   const recentRows = db
-    .query(
+    .query<Pick<CommitRecord, "commit_sha" | "commit_title" | "branch" | "timestamp">, [string]>(
       `WITH skill_sessions AS (
          SELECT DISTINCT session_id FROM skill_invocations WHERE skill_name = ?
        )
@@ -113,12 +104,7 @@ export function getSkillCommitSummary(db: Database, skillName: string): CommitSu
        ORDER BY ct.timestamp DESC
        LIMIT 20`,
     )
-    .all(skillName) as Array<{
-    commit_sha: string;
-    commit_title: string | null;
-    branch: string | null;
-    timestamp: string;
-  }>;
+    .all(skillName);
 
   return {
     total_commits: statsRow.total_commits,

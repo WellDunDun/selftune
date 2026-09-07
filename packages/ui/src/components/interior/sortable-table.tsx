@@ -27,18 +27,19 @@ export type SortableColumn<T> = {
   header: string;
   width?: string;
   align?: "start" | "end";
-  numeric?: boolean;
   sortable?: boolean;
-  value?: (row: T) => string | number | null | undefined;
   cell?: (row: T) => ReactNode;
-};
+} & (
+  | { numeric: true; value?: (row: T) => number | null | undefined }
+  | { numeric?: false; value?: (row: T) => string | null | undefined }
+);
 
 export type OrderedRow<T> = { id: string; row: T; index: number };
 
 export type UseSortableRowsOptions<T> = {
   rows: T[];
   getRowId: (row: T) => string;
-  getValue: (row: T, columnId: string) => string | number | null | undefined;
+  columns: SortableColumn<T>[];
   sort?: SortState | null;
   defaultSort?: SortState | null;
   onSortChange?: (next: SortState | null) => void;
@@ -48,7 +49,7 @@ export type UseSortableRowsOptions<T> = {
 export function useSortableRows<T>({
   rows,
   getRowId,
-  getValue,
+  columns,
   sort,
   defaultSort = null,
   onSortChange,
@@ -69,25 +70,23 @@ export function useSortableRows<T>({
 
     if (current) {
       const dir = current.direction === "asc" ? 1 : -1;
+      const column = columns.find((candidate) => candidate.id === current.columnId);
       base.sort((x, y) => {
-        const a = getValue(x.row, current.columnId);
-        const b = getValue(y.row, current.columnId);
+        const a = column?.value?.(x.row);
+        const b = column?.value?.(y.row);
         const emptyA = a === null || a === undefined || a === "";
         const emptyB = b === null || b === undefined || b === "";
         if (emptyA || emptyB) {
           if (emptyA && emptyB) return x.i - y.i;
           return emptyA ? 1 : -1;
         }
-        const d =
-          typeof a === "number" && typeof b === "number"
-            ? a - b
-            : collator.compare(String(a), String(b));
+        const d = column?.numeric ? Number(a) - Number(b) : collator.compare(String(a), String(b));
         return d === 0 ? x.i - y.i : d * dir;
       });
     }
 
     return base.map(({ id, row }, index) => ({ id, row, index }));
-  }, [rows, current, getRowId, getValue, collator]);
+  }, [rows, current, getRowId, columns, collator]);
 
   const toggle = useCallback(
     (columnId: string) => {
@@ -163,14 +162,6 @@ export function SortableTable<T>({
     [],
   );
 
-  const getValue = useCallback(
-    (row: T, columnId: string) => {
-      const column = columns.find((c) => c.id === columnId);
-      return column?.value ? column.value(row) : null;
-    },
-    [columns],
-  );
-
   const {
     sort: current,
     ordered,
@@ -179,7 +170,7 @@ export function SortableTable<T>({
   } = useSortableRows<T>({
     rows,
     getRowId,
-    getValue,
+    columns,
     sort,
     defaultSort,
     onSortChange,

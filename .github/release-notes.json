@@ -4,6 +4,952 @@
   "docsUrl": "https://docs.selftune.dev/changelog",
   "entries": [
     {
+      "label": "2026-09-07",
+      "description": "Validate redacted contributions and preserve diagnostic errors",
+      "tags": ["CLI", "Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-07",
+      "description": "Preserve history when optional telemetry metadata is malformed",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-07",
+      "description": "Validate saved workspace policies before installation",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-07",
+      "description": "Keep dashboard updates resilient to malformed events",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-07",
+      "description": "Validate quarantine receipts before restoring skills",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-07",
+      "description": "Validate Desktop startup markers and API errors",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-07",
+      "description": "Validate stored package-search provenance",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-07",
+      "description": "Validate hook inputs before recording sessions",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-07",
+      "description": "Confine managed agent cleanup to agent filenames",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-07",
+      "description": "Validate evidence behind lifecycle suggestions",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-07",
+      "description": "Preserve configuration when changing analytics consent",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-07",
+      "description": "Keep malformed grading files out of result lists",
+      "tags": ["Desktop", "CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate remote sharing and workspace responses",
+      "tags": ["Desktop", "Self-hosted"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Preserve live command output behavior",
+      "tags": ["Desktop", "CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate runtime status before displaying updates",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate correction reviews before recording",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate trace candidate requests before replay",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Keep self-host validation errors free of request contents",
+      "tags": ["Self-hosted"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Preserve mixed user hook groups during uninstall",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate saved team contribution queues",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Reject empty evolution strategy flags",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Check host plugin state before installation",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Reject malformed scheduling flags",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate evaluation files and model results",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate imported task metadata",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate local dashboard action requests",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Check installed Codex hook commands",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate explicit description-evolution eval files",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate body-quality response fields",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate saved synthesis release authority",
+      "tags": ["CLI", "Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate device-link grants and approvals",
+      "tags": ["CLI", "Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Use one draft manifest reader for readiness and fingerprints",
+      "tags": ["CLI", "Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate explicit body evolution inputs before proposals",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Keep malformed search evidence out of mutation inputs",
+      "tags": ["CLI", "Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Preserve OpenCode config on invalid installer input",
+      "tags": ["CLI", "Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate staged contributor signals before upload",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate historical regression evidence before replay",
+      "tags": ["Desktop", "CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Preserve Claude settings during packaged hook installation",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate Team CLI upload receipts",
+      "tags": ["CLI", "Teams"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Reject invalid explicit baseline eval sets",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate dashboard reports and saved caches",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Keep Windows installation I/O failures diagnosable",
+      "tags": ["CLI", "Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate local JSONL recovery records",
+      "tags": ["CLI", "Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate saved scheduling preferences",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Drain agent subprocess output while it runs",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Distinguish malformed plugin inventories from empty ones",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Preserve contribution choices while validating saved config",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate team assignment recovery journals",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate saved package-candidate evaluations",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate saved skill-edit capture state",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate the skill revision selected for sharing",
+      "tags": ["Desktop"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate local MCP skill requests",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate correction evidence without changing its meaning",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Validate the local OTLP codec boundary",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-06",
+      "description": "Preserve valid Codex replay output through malformed events",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate CLI update-check records",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Keep malformed saved measurements out of skill reports",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Preserve valid skill-use records during local recovery",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate saved evaluation evidence before using it",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate tool-hook inputs and preserve skill-use evidence",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Keep Codex ingestion running past malformed evidence",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate installation recovery records",
+      "tags": ["Sharing"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Preserve Claude settings during hook setup",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Remove hosted telemetry preparation from sync",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Preserve valid compatibility queue prefixes",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate use-once workspace ownership",
+      "tags": ["Sharing"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate use-once authority contracts",
+      "tags": ["Sharing"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate skill usage repair evidence",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Bound Pi session tree ingestion",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate Codex rollout evidence",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate Windows lock evidence",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate OpenCode session inputs",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate stored report inputs",
+      "tags": ["Dashboard"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Preserve valid transcript evidence",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate skill unit tests before execution",
+      "tags": ["CLI"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate blog data before rendering",
+      "tags": ["Community"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate public validator responses",
+      "tags": ["Community"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Read evaluation evidence through a shared contract",
+      "tags": ["Dashboard"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Read trust summaries from stored JSON safely",
+      "tags": ["Dashboard"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Reject invalid Library filter values",
+      "tags": ["Dashboard"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Validate saved server profiles before use",
+      "tags": ["Dashboard"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Context savings distinguish system and project scopes",
+      "tags": ["Dashboard"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Review on-demand skills at Library scale",
+      "tags": ["Dashboard"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "On-demand setup stays out of your Library workspace",
+      "tags": ["Dashboard"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-05",
+      "description": "Cloud stays usable after sign-in on every plan",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-09-04",
+      "description": "Use specialist skills only for the task that needs them",
+      "tags": ["CLI", "Dashboard", "OSS"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
       "label": "2026-09-03",
       "description": "Skill Set license draft recovery",
       "tags": ["Dashboard", "OSS"],

@@ -10,10 +10,12 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import * as Schema from "effect/Schema";
 
 import { getSkillEditCaptureLogPath, SESSION_STATE_DIR } from "@selftune/runtime/constants";
-import type { PostToolUsePayload, PreToolUsePayload } from "@selftune/runtime/types";
+import { PostToolUsePayload, type PreToolUsePayload } from "@selftune/runtime/types";
 import { computeSkillVersionHash } from "@selftune/runtime/utils/skill-discovery";
+import { optionalEvidence } from "@selftune/runtime/utils/transcript-contract";
 
 import { isSkillMdWrite } from "@selftune/harness-core/skill-paths";
 import { loadSessionState, saveSessionState } from "@selftune/harness-core/session-state";
@@ -24,13 +26,19 @@ import {
   writeHookExecutionResult,
 } from "./execution-result.js";
 
-type PendingEdit = {
-  readonly target_digest: string;
-  readonly pre_revision: string | null;
-  readonly pre_captured_at: string;
-};
-
-type CaptureState = { readonly pending: Record<string, PendingEdit> };
+const PendingEdit = Schema.Struct({
+  target_digest: Schema.String,
+  pre_revision: Schema.NullOr(Schema.String),
+  pre_captured_at: Schema.String,
+});
+const CaptureState = Schema.Struct({
+  pending: Schema.Record(Schema.String, Schema.mutableKey(PendingEdit)),
+});
+const decodeTarget = Schema.decodeUnknownSync(
+  Schema.Struct({
+    file_path: optionalEvidence(Schema.String),
+  }),
+);
 
 export type SkillEditCaptureArtifact = {
   readonly schema_version: "1";
@@ -56,17 +64,13 @@ function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function filePath(input: Record<string, unknown>): string | null {
-  return typeof input.file_path === "string" && input.file_path.length > 0 ? input.file_path : null;
+function filePath(input: PreToolUsePayload["tool_input"]): string | null {
+  const path = decodeTarget(input).file_path;
+  return path || null;
 }
 
-function toolKey(payload: {
-  tool_use_id?: string;
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
-}): string {
-  if (typeof payload.tool_use_id === "string" && payload.tool_use_id.length > 0)
-    return payload.tool_use_id;
+function toolKey(payload: PreToolUsePayload): string {
+  if (payload.tool_use_id) return payload.tool_use_id;
   return digest(
     JSON.stringify({
       tool: payload.tool_name ?? "",
@@ -75,7 +79,7 @@ function toolKey(payload: {
   );
 }
 
-function wasSuccessful(response: Record<string, unknown> | undefined): boolean {
+function wasSuccessful(response: PostToolUsePayload["tool_response"]): boolean {
   if (!response) return true;
   return response.success !== false && response.is_error !== true && response.error === undefined;
 }
@@ -99,7 +103,7 @@ export function captureSkillEditPre(
   const sessionId = payload.session_id ?? "unknown";
   const stateDir = options.stateDir ?? captureStateDir();
   const key = toolKey(payload);
-  const state = loadSessionState<CaptureState>(stateDir, "skill-edit-capture", sessionId, () => ({
+  const state = loadSessionState(stateDir, "skill-edit-capture", sessionId, CaptureState, () => ({
     pending: {},
   }));
   const hashSkill = options.hashSkill ?? computeSkillVersionHash;
@@ -122,7 +126,7 @@ export function captureSkillEditPost(
   const sessionId = payload.session_id ?? "unknown";
   const stateDir = options.stateDir ?? captureStateDir();
   const key = toolKey(payload);
-  const state = loadSessionState<CaptureState>(stateDir, "skill-edit-capture", sessionId, () => ({
+  const state = loadSessionState(stateDir, "skill-edit-capture", sessionId, CaptureState, () => ({
     pending: {},
   }));
   const pending = state.data.pending[key];
@@ -165,7 +169,7 @@ export async function runSkillEditCaptureHook(rawStdin: string): Promise<HookExe
   try {
     if (!rawStdin.includes("SKILL.md") && !rawStdin.includes("skill.md"))
       return SILENT_HOOK_SUCCESS;
-    const payload = JSON.parse(rawStdin) as PreToolUsePayload & PostToolUsePayload;
+    const payload = Schema.decodeUnknownSync(Schema.fromJsonString(PostToolUsePayload))(rawStdin);
     if (payload.hook_event_name === "PreToolUse") captureSkillEditPre(payload);
     if (payload.hook_event_name === "PostToolUse") captureSkillEditPost(payload);
   } catch {

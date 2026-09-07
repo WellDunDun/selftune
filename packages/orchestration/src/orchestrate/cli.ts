@@ -121,7 +121,6 @@ export function parseOrchestrateCliArgs(
 export function buildOrchestrateJsonOutput(result: OrchestrateResult) {
   return {
     ...result.summary,
-    ...(result.uploadSummary ? { upload: result.uploadSummary } : {}),
     workflow_proposals: result.workflowProposals.map((proposal) => ({
       proposal_id: proposal.proposal_id,
       source_skill_name: proposal.source_skill_name,
@@ -131,31 +130,45 @@ export function buildOrchestrateJsonOutput(result: OrchestrateResult) {
       confidence: proposal.confidence,
       reason: proposal.rationale,
     })),
-    decisions: result.candidates.map((candidate) => ({
-      skill: candidate.skill,
-      action: candidate.action,
-      reason: candidate.reason,
-      ...(candidate.evolveResult
-        ? {
-            deployed: candidate.evolveResult.deployed,
-            evolveReason: candidate.evolveResult.reason,
-            validation: candidate.evolveResult.validation
-              ? {
-                  before: candidate.evolveResult.validation.before_pass_rate,
-                  after: candidate.evolveResult.validation.after_pass_rate,
-                  improved: candidate.evolveResult.validation.improved,
-                }
-              : null,
-          }
-        : {}),
-      ...(candidate.watchResult
-        ? {
-            alert: candidate.watchResult.alert,
-            rolledBack: candidate.watchResult.rolledBack,
-            passRate: candidate.watchResult.snapshot?.pass_rate ?? null,
-            recommendation: candidate.watchResult.recommendation,
-          }
-        : {}),
-    })),
+    decisions: result.candidates.map(buildDecision),
   };
+}
+
+type Candidate = OrchestrateResult["candidates"][number];
+type Evolution = NonNullable<Candidate["evolveResult"]>;
+type Watch = NonNullable<Candidate["watchResult"]>;
+type Decision = Pick<Candidate, "skill" | "action" | "reason"> &
+  Partial<Pick<Watch, "alert" | "rolledBack" | "recommendation">> & {
+    deployed?: Evolution["deployed"];
+    evolveReason?: Evolution["reason"];
+    validation?: { before: number; after: number; improved: boolean } | null;
+    passRate?: number | null;
+  };
+
+function buildDecision(candidate: Candidate): Decision {
+  const decision: Decision = {
+    skill: candidate.skill,
+    action: candidate.action,
+    reason: candidate.reason,
+  };
+  const evolution = candidate.evolveResult;
+  if (evolution) {
+    decision.deployed = evolution.deployed;
+    decision.evolveReason = evolution.reason;
+    decision.validation = evolution.validation
+      ? {
+          before: evolution.validation.before_pass_rate,
+          after: evolution.validation.after_pass_rate,
+          improved: evolution.validation.improved,
+        }
+      : null;
+  }
+  const watch = candidate.watchResult;
+  if (watch) {
+    decision.alert = watch.alert;
+    decision.rolledBack = watch.rolledBack;
+    decision.passRate = watch.snapshot?.pass_rate ?? null;
+    decision.recommendation = watch.recommendation;
+  }
+  return decision;
 }

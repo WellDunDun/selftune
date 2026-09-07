@@ -81,7 +81,7 @@ function buildReportHTML(
   );
   const passRateDisplay =
     skill.passRate !== null ? `${Math.round(skill.passRate * 100)}%` : "No data";
-  const trendArrows: Record<string, string> = {
+  const trendArrows = {
     up: "\u2191",
     down: "\u2193",
     stable: "\u2192",

@@ -16,7 +16,7 @@ import { parseArgs } from "node:util";
 import { TELEMETRY_LOG } from "../constants.js";
 import { getDb } from "../localdb/db.js";
 import { querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
-import type { GradingResult, SessionTelemetryRecord, SkillUsageRecord } from "../types.js";
+import type { GradingResult, SessionTelemetryRecord } from "../types.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import {
   detectLlmAgent as _detectAgent,
@@ -98,8 +98,8 @@ Options:
 
   // --- Auto-find session ---
   const db = getDb();
-  const telRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
-  const skillUsageRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+  const telRecords = querySessionTelemetry(db);
+  const skillUsageRecords = querySkillUsageRecords(db);
 
   let telemetry: SessionTelemetryRecord;
   let sessionId: string;

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import type * as Schema from "effect/Schema";
+import { jsonRequest } from "../../../tests/helpers/json-request.js";
 
 import type {
   PluginInventoryModel,
@@ -18,19 +20,17 @@ const inventory: PluginInventoryModel = {
 };
 
 function routeRequest(
-  runtime: ManagedRuntime.ManagedRuntime<DashboardOperations>,
+  runtime: ManagedRuntime.ManagedRuntime<DashboardOperations, never>,
   path: string,
-  body?: unknown,
+  body?: typeof Schema.Json.Type,
   includeOrigin = true,
 ) {
-  const request = new Request(`${origin}${path}`, {
-    method: body === undefined ? "GET" : "POST",
-    headers: {
-      ...(includeOrigin ? { Origin: origin } : {}),
-      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  const request = jsonRequest(
+    `${origin}${path}`,
+    body === undefined ? "GET" : "POST",
+    body,
+    includeOrigin ? origin : undefined,
+  );
   return runtime.runPromise(
     handleDashboardApplicationRoute(request, new URL(request.url), {
       allowedOrigins: new Set([origin]),
@@ -39,6 +39,35 @@ function routeRequest(
 }
 
 describe("Plugin management application routes", () => {
+  test("keeps CORS on malformed JSON errors without invoking the host", async () => {
+    let called = false;
+    const runtime = ManagedRuntime.make(
+      makeDashboardOperationsLayer({
+        pluginManager: (input) => {
+          called = true;
+          return { ...input, completedAt: "2026-08-11T09:31:00.000Z", inventory };
+        },
+      }),
+    );
+    const request = new Request(`${origin}/api/v2/plugins/manage`, {
+      method: "POST",
+      headers: { Origin: origin, "Content-Type": "application/json" },
+      body: "{",
+    });
+    try {
+      const response = await runtime.runPromise(
+        handleDashboardApplicationRoute(request, new URL(request.url), {
+          allowedOrigins: new Set([origin]),
+        }),
+      );
+      expect(response?.status).toBe(400);
+      expect(response?.headers.get("Access-Control-Allow-Origin")).toBe("*");
+      expect(called).toBe(false);
+    } finally {
+      await runtime.dispose();
+    }
+  });
+
   test("loads inventory and maps an explicit host action", async () => {
     const calls: PluginManagementInputModel[] = [];
     const runtime = ManagedRuntime.make(
@@ -65,6 +94,8 @@ describe("Plugin management application routes", () => {
 
       expect(await loaded?.json()).toEqual(inventory);
       expect(managed?.status).toBe(200);
+      expect(loaded?.headers.get("Access-Control-Allow-Origin")).toBe("*");
+      expect(managed?.headers.get("Access-Control-Allow-Origin")).toBe("*");
       expect(calls).toEqual([
         { host: "claude", pluginId: "paper-desktop@paper", action: "disable" },
       ]);
@@ -92,6 +123,7 @@ describe("Plugin management application routes", () => {
         false,
       );
       expect(response?.status).toBe(403);
+      expect(response?.headers.get("Access-Control-Allow-Origin")).toBe("*");
       expect(called).toBe(false);
     } finally {
       await runtime.dispose();

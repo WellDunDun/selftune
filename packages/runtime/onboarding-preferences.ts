@@ -1,14 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { SelftunePreferences } from "@selftune/config";
+import { HarnessId, type SelftunePreferences } from "@selftune/config";
+import { flow, Option, Schema } from "effect";
 
 import { SELFTUNE_CONFIG_DIR } from "./constants.js";
-import type {
-  HarnessId,
-  OnboardingFeatureId,
-  OnboardingPreferences,
-} from "./dashboard-contract.js";
+import type { OnboardingFeatureId, OnboardingPreferences } from "./dashboard-contract.js";
+import { optionalEvidence } from "./utils/transcript-contract.js";
 
 const ONBOARDING_FILENAME = "onboarding.json";
 const HARNESS_IDS: HarnessId[] = ["claude_code", "cline", "codex", "opencode", "openclaw", "pi"];
@@ -24,20 +22,41 @@ const FEATURE_IDS: OnboardingFeatureId[] = [
   "health_recommendations",
   "autonomous_improvement",
 ];
-const HARNESS_ID_SET = new Set<string>(HARNESS_IDS);
-const HOOK_HARNESS_ID_SET = new Set<string>(HOOK_HARNESS_IDS);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isHarnessId(value: unknown): value is HarnessId {
-  return typeof value === "string" && HARNESS_ID_SET.has(value);
-}
-
-function isHookHarnessId(value: unknown): value is Exclude<HarnessId, "openclaw"> {
-  return typeof value === "string" && HOOK_HARNESS_ID_SET.has(value);
-}
+const SavedPreferences = Schema.Struct({
+  import_sources: optionalEvidence(Schema.Record(HarnessId, optionalEvidence(Schema.Boolean))),
+  features: optionalEvidence(
+    Schema.Struct({
+      observability: optionalEvidence(Schema.Boolean),
+      health_recommendations: optionalEvidence(Schema.Boolean),
+      autonomous_improvement: optionalEvidence(Schema.Boolean),
+    }),
+  ),
+});
+const SavedConfig = Schema.Struct({ preferences: SavedPreferences });
+const LegacyPreferences = Schema.Struct({ version: Schema.Literal(1), ...SavedPreferences.fields });
+const OnboardingRequest = Schema.Struct({
+  import_sources: Schema.Array(
+    HarnessId.annotate({
+      message: "Onboarding includes an unknown import source.",
+    }),
+  ),
+  hook_harnesses: Schema.Array(
+    Schema.Literals(["claude_code", "cline", "codex", "opencode", "pi"]).annotate({
+      message: "Onboarding includes a harness that does not support hooks.",
+    }),
+  ),
+  features: Schema.Struct({
+    observability: Schema.Boolean.annotate({
+      message: "Onboarding feature observability must be true or false.",
+    }),
+    health_recommendations: Schema.Boolean.annotate({
+      message: "Onboarding feature health_recommendations must be true or false.",
+    }),
+    autonomous_improvement: Schema.Boolean.annotate({
+      message: "Onboarding feature autonomous_improvement must be true or false.",
+    }),
+  }),
+});
 
 function resolvedConfigDir(configDir?: string): string {
   return configDir ?? process.env.SELFTUNE_CONFIG_DIR ?? SELFTUNE_CONFIG_DIR;
@@ -80,60 +99,18 @@ export function loadOnboardingPreferences(configDir?: string): OnboardingPrefere
   if (!existsSync(path)) return fallback;
 
   try {
-    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (!isRecord(parsed) || !isRecord(parsed.preferences)) return fallback;
-    const preferences = parsed.preferences;
-    if (isRecord(preferences.import_sources)) {
-      for (const id of HARNESS_IDS) {
-        if (typeof preferences.import_sources[id] === "boolean") {
-          fallback.import_sources[id] = preferences.import_sources[id];
-        }
-      }
-    }
-    if (isRecord(preferences.features)) {
-      for (const id of FEATURE_IDS) {
-        if (typeof preferences.features[id] === "boolean") {
-          fallback.features[id] = preferences.features[id];
-        }
-      }
-    }
-    fallback.completed = true;
-    return fallback;
+    const parsed = Schema.decodeUnknownSync(Schema.fromJsonString(SavedConfig))(
+      readFileSync(path, "utf8"),
+    );
+    return resolveSavedPreferences(parsed.preferences);
   } catch {
     return fallback;
   }
 }
 
-export function normalizeOnboardingRequest(input: unknown): OnboardingPreferences {
-  if (!isRecord(input) || !Array.isArray(input.import_sources)) {
-    throw new Error("Onboarding must include import_sources.");
-  }
-  if (!Array.isArray(input.hook_harnesses) || !isRecord(input.features)) {
-    throw new Error("Onboarding must include hook_harnesses and features.");
-  }
-
-  const importSources = new Set<HarnessId>();
-  for (const value of input.import_sources) {
-    if (!isHarnessId(value)) {
-      throw new Error("Onboarding includes an unknown import source.");
-    }
-    importSources.add(value);
-  }
-
-  const hookHarnesses = new Set<Exclude<HarnessId, "openclaw">>();
-  for (const value of input.hook_harnesses) {
-    if (!isHookHarnessId(value)) {
-      throw new Error("Onboarding includes a harness that does not support hooks.");
-    }
-    hookHarnesses.add(value);
-  }
-
-  for (const id of FEATURE_IDS) {
-    if (typeof input.features[id] !== "boolean") {
-      throw new Error(`Onboarding feature ${id} must be true or false.`);
-    }
-  }
-
+function normalizeRequest(input: typeof OnboardingRequest.Type): OnboardingPreferences {
+  const importSources = new Set(input.import_sources);
+  const hookHarnesses = new Set(input.hook_harnesses);
   const normalized = defaultOnboardingPreferences();
   normalized.completed = true;
   for (const id of HARNESS_IDS) normalized.import_sources[id] = importSources.has(id);
@@ -141,6 +118,11 @@ export function normalizeOnboardingRequest(input: unknown): OnboardingPreference
   for (const id of FEATURE_IDS) normalized.features[id] = input.features[id] === true;
   return normalized;
 }
+
+export const normalizeOnboardingRequest = flow(
+  Schema.decodeUnknownSync(OnboardingRequest),
+  normalizeRequest,
+);
 
 export function persistedPreferences(
   preferences: Pick<OnboardingPreferences, "import_sources" | "features">,
@@ -162,20 +144,22 @@ export function persistedPreferences(
   };
 }
 
-export function decodeLegacyOnboardingPreferences(input: unknown): SelftunePreferences | null {
-  if (!isRecord(input) || input.version !== 1) return null;
+function resolveSavedPreferences(input: typeof SavedPreferences.Type): OnboardingPreferences {
   const normalized = defaultOnboardingPreferences();
-  if (isRecord(input.import_sources)) {
-    for (const id of HARNESS_IDS) {
-      if (typeof input.import_sources[id] === "boolean") {
-        normalized.import_sources[id] = input.import_sources[id];
-      }
-    }
+  normalized.completed = true;
+  for (const id of HARNESS_IDS) {
+    const enabled = input.import_sources?.[id];
+    if (enabled !== undefined) normalized.import_sources[id] = enabled;
   }
-  if (isRecord(input.features)) {
-    for (const id of FEATURE_IDS) {
-      if (typeof input.features[id] === "boolean") normalized.features[id] = input.features[id];
-    }
+  for (const id of FEATURE_IDS) {
+    const enabled = input.features?.[id];
+    if (enabled !== undefined) normalized.features[id] = enabled;
   }
-  return persistedPreferences(normalized);
+  return normalized;
 }
+
+export const decodeLegacyOnboardingPreferences = flow(
+  Schema.decodeUnknownOption(LegacyPreferences),
+  Option.map((input) => persistedPreferences(resolveSavedPreferences(input))),
+  Option.getOrNull,
+);

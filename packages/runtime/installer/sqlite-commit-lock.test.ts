@@ -98,18 +98,17 @@ describe("SQLite installer exclusive commit lock", () => {
       const firstLock = makeSqliteInstallerExclusiveCommitLock(firstDb, options);
       const secondLock = makeSqliteInstallerExclusiveCommitLock(secondDb, options);
       const first = Effect.runPromise(
-        firstLock.withExclusiveCommit((fence) =>
-          Effect.gen(function* () {
-            generations.push(fence.generation!);
-            firstEntered();
-            yield* Effect.promise(() => oldCheckpointGate);
-            yield* fence.checkpoint!;
-            oldMutationRan = true;
-          }),
-        ),
-      ).then(
-        () => null,
-        (error: unknown) => error,
+        firstLock
+          .withExclusiveCommit((fence) =>
+            Effect.gen(function* () {
+              generations.push(fence.generation!);
+              firstEntered();
+              yield* Effect.promise(() => oldCheckpointGate);
+              yield* fence.checkpoint!;
+              oldMutationRan = true;
+            }),
+          )
+          .pipe(Effect.result),
       );
       await enteredFirst;
       timestamp = 200;
@@ -124,9 +123,11 @@ describe("SQLite installer exclusive commit lock", () => {
       );
       await enteredSecond;
       allowOldCheckpoint();
-      const oldError = await first;
-      expect(oldError).not.toBeNull();
-      expect((oldError as { code?: string }).code).toBe("INSTALL_COMMIT_FENCE_LOST");
+      const oldResult = await first;
+      expect(oldResult._tag).toBe("Failure");
+      if (oldResult._tag === "Failure") {
+        expect(oldResult.failure.code).toBe("INSTALL_COMMIT_FENCE_LOST");
+      }
       expect(oldMutationRan).toBe(false);
       expect(generations).toEqual([1, 2]);
       releaseSecond();
@@ -135,6 +136,30 @@ describe("SQLite installer exclusive commit lock", () => {
       firstDb.close();
       secondDb.close();
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("a failed commit releases its lease and the next owner gets a new generation", async () => {
+    const db = openDb(":memory:");
+    try {
+      const lock = makeSqliteInstallerExclusiveCommitLock(db);
+      const cause = new Error("Commit failed");
+      const failed = await Effect.runPromise(
+        lock.withExclusiveCommit(() => Effect.fail(cause)).pipe(Effect.result),
+      );
+      expect(failed._tag).toBe("Failure");
+      if (failed._tag === "Failure") expect(failed.failure).toBe(cause);
+      expect(
+        db
+          .query("SELECT owner_token, generation, lease_expires_at FROM skill_install_commit_locks")
+          .get(),
+      ).toEqual({ owner_token: null, generation: 1, lease_expires_at: 0 });
+      const generation = await Effect.runPromise(
+        lock.withExclusiveCommit((fence) => Effect.succeed(fence.generation)),
+      );
+      expect(generation).toBe(2);
+    } finally {
+      db.close();
     }
   });
 });

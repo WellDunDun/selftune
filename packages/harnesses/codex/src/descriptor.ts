@@ -1,5 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
+import { CodexHooksFile } from "./adapters/codex/hooks-config.js";
 
 import type {
   HarnessPackageContribution,
@@ -8,20 +10,26 @@ import type {
 } from "@selftune/harness-core/descriptor";
 import { svgHarnessIcon } from "@selftune/harness-core/descriptor";
 
-function containsSelftuneHook(value: unknown): boolean {
-  if (typeof value === "string") return value.includes("codex hook") && value.includes("selftune");
-  if (Array.isArray(value)) return value.some(containsSelftuneHook);
-  if (typeof value !== "object" || value === null) return false;
-  return Object.values(value).some(containsSelftuneHook);
-}
-
-function hooksAt(path: string): unknown {
+export function hasCodexHooksAt(path: string): boolean {
   try {
-    const value: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (typeof value !== "object" || value === null) return null;
-    return Reflect.get(value, "hooks");
+    const { hooks } = Schema.decodeUnknownSync(Schema.fromJsonString(CodexHooksFile))(
+      readFileSync(path, "utf8"),
+    );
+    return ["SessionStart", "PreToolUse", "PostToolUse", "Stop"].every(
+      (event) =>
+        hooks?.[event]?.some((group) =>
+          group.hooks.some((handler) => {
+            const command = handler.command;
+            return (
+              command !== undefined &&
+              command.includes("codex hook") &&
+              command.includes("selftune")
+            );
+          }),
+        ) === true,
+    );
   } catch {
-    return null;
+    return false;
   }
 }
 
@@ -42,12 +50,7 @@ export const codexRuntime: HarnessRuntimeContribution = {
     const root = process.env.CODEX_HOME || join(homeDir, ".codex");
     const hooksPath = join(root, "hooks.json");
     const sessionsPath = join(root, "sessions");
-    const hooks = hooksAt(hooksPath);
-    const hooksInstalled = ["SessionStart", "PreToolUse", "PostToolUse", "Stop"].every((event) =>
-      containsSelftuneHook(
-        typeof hooks === "object" && hooks !== null ? Reflect.get(hooks, event) : null,
-      ),
-    );
+    const hooksInstalled = hasCodexHooksAt(hooksPath);
     const importAvailable = existsSync(sessionsPath);
     return {
       detected: existsSync(root) || Boolean(which("codex")),

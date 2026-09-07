@@ -99,11 +99,11 @@ export async function submitContributionToService(
   try {
     const url = `${endpoint}/api/v1/community/bundles`;
     const payload = `{"creator_id":${JSON.stringify(creatorId)},"skill_name":${JSON.stringify(skillName)},"bundle":${json}}`;
-    const headers: Record<string, string> = {
+    const headers = new Headers({
       "Content-Type": "application/json",
       "User-Agent": `selftune/${getSelftuneVersion()}`,
-    };
-    if (auth?.apiKey) headers.Authorization = `Bearer ${auth.apiKey}`;
+    });
+    if (auth?.apiKey) headers.set("Authorization", `Bearer ${auth.apiKey}`);
 
     const response = await fetch(url, {
       method: "POST",

@@ -1,35 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { DesktopBillingStatus } from "@/types";
-
-const checkoutMutate = vi.fn();
-const portalMutate = vi.fn();
-const refetch = vi.fn();
-let billingState: {
-  isLoading: boolean;
-  isError: boolean;
-  data: DesktopBillingStatus | undefined;
-  error: Error | null;
-  refetch: () => void;
-};
-
-vi.mock("@/hooks/useSettings", () => ({
-  useCloudBillingStatus: () => billingState,
-  useCloudBillingCheckout: () => ({ isPending: false, mutate: checkoutMutate }),
-  useCloudBillingPortal: () => ({ isPending: false, mutate: portalMutate }),
-}));
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
-vi.mock("@/components/ui/button", () => ({
-  Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
-  ),
-}));
-vi.mock("@/components/ui/input", () => ({
-  Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
-}));
 
 import { BillingSettingsPanel } from "./BillingSettingsPanel";
 
@@ -70,74 +45,115 @@ function status(overrides: Partial<DesktopBillingStatus> = {}): DesktopBillingSt
 }
 
 function renderPanel(props: Partial<React.ComponentProps<typeof BillingSettingsPanel>> = {}) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(
-    <BillingSettingsPanel
-      active
-      cloudConfigured
-      connectPending={false}
-      onConnect={vi.fn()}
-      {...props}
-    />,
+    <QueryClientProvider client={client}>
+      <BillingSettingsPanel
+        active
+        cloudConfigured
+        connectPending={false}
+        onConnect={vi.fn()}
+        {...props}
+      />
+    </QueryClientProvider>,
   );
 }
 
 afterEach(() => {
   cleanup();
-  checkoutMutate.mockReset();
-  portalMutate.mockReset();
-  refetch.mockReset();
-  billingState = { isLoading: false, isError: false, data: status(), error: null, refetch };
+  vi.restoreAllMocks();
 });
 
 describe("BillingSettingsPanel", () => {
   it("offers Connect Cloud while Desktop is not linked", () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Unexpected request"));
     const onConnect = vi.fn();
     renderPanel({ cloudConfigured: false, onConnect });
     fireEvent.click(screen.getByRole("button", { name: "Connect Cloud" }));
     expect(onConnect).toHaveBeenCalledOnce();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("shows the linked workspace plan with Cloud-compatible price formatting", () => {
-    renderPanel();
-    expect(screen.getByText("Current plan: Community")).not.toBeNull();
-    expect(screen.getByText("$12/month")).not.toBeNull();
-  });
-
-  it("uses a user-facing Enterprise fallback when Cloud omits that plan", () => {
-    billingState = {
-      isLoading: false,
-      isError: false,
-      data: status({ plan: "enterprise", availablePlans: [] }),
-      error: null,
-      refetch,
-    };
-    renderPanel();
-    expect(screen.getByText("Current plan: Enterprise")).not.toBeNull();
-  });
-
-  it("sends the owner-selected Team seat count and opens checkout externally", () => {
-    const openExternal = vi.fn();
-    checkoutMutate.mockImplementation((input, callbacks) =>
-      callbacks.onSuccess({ url: "https://stripe.test" }),
+  it("uses a user-facing Enterprise fallback when Cloud omits that plan", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      Response.json(status({ plan: "enterprise", availablePlans: [] })),
     );
-    renderPanel({ openExternal });
-    fireEvent.change(screen.getByLabelText("Team seats"), { target: { value: "7" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Choose plan" })[1]!);
-    expect(checkoutMutate).toHaveBeenCalledWith({ plan: "team", seats: 7 }, expect.any(Object));
-    expect(openExternal).toHaveBeenCalledWith("https://stripe.test");
+    renderPanel();
+    await screen.findByText("Current plan: Enterprise");
   });
 
-  it("renders a retryable inline error without disconnecting the local app", () => {
-    billingState = {
-      isLoading: false,
-      isError: true,
-      data: undefined,
-      error: new Error("Cloud offline"),
-      refetch,
-    };
+  it("shows pricing, sends the selected Team seats, and opens the returned checkout URL", async () => {
+    const openExternal = vi.fn();
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (url === "/api/v2/settings/billing/status") return Response.json(status());
+      if (url === "/api/v2/settings/billing/checkout")
+        return Response.json({ url: "https://stripe.test/checkout" });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    renderPanel({ openExternal });
+    await screen.findByText("Current plan: Community");
+    expect(screen.getByText("$12/month")).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Team seats"), { target: { value: "7" } });
+    const [pro, team] = screen.getAllByRole("button", { name: "Choose plan" });
+    if (!pro || !team) throw new Error("Expected Pro and Team choices");
+    fireEvent.click(team);
+    await waitFor(() => expect(openExternal).toHaveBeenCalledWith("https://stripe.test/checkout"));
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v2/settings/billing/checkout",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ plan: "team", seats: 7 }) }),
+    );
+  });
+
+  it("recovers after an offline response without asking to reconnect", async () => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json(
+          { error: { code: "UNAVAILABLE", message: "Cloud offline" } },
+          { status: 503 },
+        ),
+      )
+      .mockImplementation(async () => Response.json(status()));
     renderPanel();
-    expect(screen.getByRole("alert").textContent).toBe("Cloud offline");
+    expect((await screen.findByRole("alert")).textContent).toBe("Cloud offline");
+    expect(screen.queryByRole("button", { name: "Connect Cloud" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /retry/i }));
-    expect(refetch).toHaveBeenCalledOnce();
+    await screen.findByText("Current plan: Community");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("opens the portal for an existing subscription instead of creating checkout", async () => {
+    const openExternal = vi.fn();
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (url === "/api/v2/settings/billing/status")
+        return Response.json(
+          status({ plan: "pro", subscriptionStatus: "active", hasStripeCustomer: true }),
+        );
+      if (url === "/api/v2/settings/billing/portal")
+        return Response.json({ url: "https://stripe.test/portal" });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    renderPanel({ openExternal });
+    fireEvent.click(await screen.findByRole("button", { name: "Manage subscription" }));
+    await waitFor(() => expect(openExternal).toHaveBeenCalledWith("https://stripe.test/portal"));
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/v2/settings/billing/portal",
+      expect.objectContaining({ method: "POST", body: "{}" }),
+    );
+  });
+
+  it("does not let a non-owner start checkout", async () => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => Response.json(status({ canManageBilling: false })));
+    renderPanel();
+    await screen.findByText("Only workspace owners can manage billing.");
+    for (const button of screen.getAllByRole("button", { name: "Choose plan" })) {
+      expect(button.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(button);
+    }
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

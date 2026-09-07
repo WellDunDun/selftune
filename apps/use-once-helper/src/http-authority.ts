@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import * as Schema from "effect/Schema";
 
 import type {
   SealedObjectDelivery,
@@ -121,7 +122,9 @@ async function readBoundedBody(response: Response, maximumBytes: number): Promis
   return bytes;
 }
 
-async function readJson(response: Response): Promise<unknown> {
+const decodeResponseJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
+
+async function readJson(response: Response): Promise<Schema.Json> {
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   if (!contentType.startsWith("application/json"))
     throw new UseOnceHelperError(
@@ -130,7 +133,7 @@ async function readJson(response: Response): Promise<unknown> {
     );
   const bytes = await readBoundedBody(response, MAXIMUM_JSON_RESPONSE_BYTES);
   try {
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown;
+    return decodeResponseJson(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch (cause) {
     throw new UseOnceHelperError(
       "INVALID_AUTHORITY_RESPONSE",
@@ -183,7 +186,7 @@ async function fetchWithTimeout(
   }
 }
 
-function jsonRequest(body: object): RequestInit {
+function jsonRequest(body: Schema.Json): RequestInit {
   return {
     method: "POST",
     headers: { accept: "application/json", "content-type": "application/json" },
@@ -294,7 +297,7 @@ export function makePinnedUseOnceAuthorityClient(
           packagedSha256: input.preview.packagedSha256,
           contentType: PACKAGE_CONTENT_TYPE,
           contentLength,
-          contentSha256: response.headers.get("x-selftune-content-sha256"),
+          contentSha256: response.headers.get("x-selftune-content-sha256") ?? "",
           bytes,
         },
         input.preview,

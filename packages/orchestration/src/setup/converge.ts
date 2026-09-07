@@ -23,8 +23,8 @@ export interface SetupStepResult {
   readonly message?: string;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function errorMessage(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
 }
 
 function installStatus(outcome: { ok: boolean; changed: boolean }): SetupStepStatus {

@@ -20,7 +20,7 @@ function stableTelemetryId(label: string, ...parts: ReadonlyArray<string>): stri
 }
 
 function sourceCount(value: number | undefined): number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
+  return value !== undefined && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
 }
 
 /**
@@ -68,7 +68,7 @@ export function buildLocalTelemetryBatchFromOpenCode(session: ParsedSession): Lo
     startedAt,
     endedAt,
   ).slice(0, 16);
-  const span = LocalTelemetrySpan.make({
+  const sourceSpan = {
     trace_id: traceId,
     span_id: spanId,
     name: "invoke_agent opencode",
@@ -80,13 +80,17 @@ export function buildLocalTelemetryBatchFromOpenCode(session: ParsedSession): Lo
     capture_mode: "session",
     source_authority: "source_truth",
     source_id: sourceId,
-    ...(session.model_provider ? { provider: session.model_provider } : {}),
-    ...(session.model ? { model: session.model } : {}),
     input_tokens: sourceCount(session.input_tokens),
     output_tokens: sourceCount(session.output_tokens),
     error_count: sourceCount(session.errors_encountered),
     tool_call_count: sourceCount(session.total_tool_calls),
-  });
+  } satisfies LocalTelemetrySpan;
+  const providerSpan = session.model_provider
+    ? { ...sourceSpan, provider: session.model_provider }
+    : sourceSpan;
+  const span = LocalTelemetrySpan.make(
+    session.model ? { ...providerSpan, model: session.model } : providerSpan,
+  );
   const detections =
     session.skill_detections ??
     session.skills_triggered.map((skill_name) => ({

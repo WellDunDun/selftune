@@ -16,6 +16,7 @@ import type {
   CanonicalExecutionFactRecord,
   CanonicalPromptRecord,
   CanonicalRecord,
+  CanonicalRawSourceRef,
   CanonicalSessionRecord,
   CanonicalSkillInvocationRecord,
 } from "@selftune/telemetry-contract";
@@ -29,6 +30,7 @@ import type {
   SkillUsageRecord,
 } from "../types.js";
 import { getDb } from "./db.js";
+import { decodeInvocationLocalFields } from "./invocation-local-fields.js";
 
 // -- Consolidated skill invocation input --------------------------------------
 
@@ -50,7 +52,7 @@ export interface SkillInvocationWriteInput {
   normalized_at?: string;
   normalizer_version?: string;
   capture_mode?: string;
-  raw_source_ref?: Record<string, unknown>;
+  raw_source_ref?: CanonicalRawSourceRef;
   // Extra fields from skill_usage
   query?: string;
   skill_path?: string;
@@ -106,27 +108,7 @@ function safeWriteResult<T>(label: string, fn: (db: Database) => T): T | null {
 // -- Canonical record dispatcher -----------------------------------------------
 
 export function writeCanonicalToDb(record: CanonicalRecord): boolean {
-  return safeWrite("canonical", (db) => {
-    switch (record.record_kind) {
-      case "session":
-        insertSession(db, record as CanonicalSessionRecord);
-        break;
-      case "prompt":
-        insertPrompt(db, record as CanonicalPromptRecord);
-        break;
-      case "skill_invocation":
-        insertSkillInvocation(
-          db,
-          record as CanonicalSkillInvocationRecord as SkillInvocationWriteInput,
-        );
-        break;
-      case "execution_fact":
-        insertExecutionFact(db, record as CanonicalExecutionFactRecord);
-        break;
-      case "normalization_run":
-        break; // no-op — not persisted to SQLite
-    }
-  });
+  return safeWrite("canonical", (db) => insertCanonicalRecord(db, record));
 }
 
 export function writeCanonicalBatchToDb(records: CanonicalRecord[]): boolean {
@@ -194,26 +176,25 @@ function deleteCanonicalSessionChildren(db: Database, session: CanonicalSessionR
 }
 
 function insertCanonicalRecords(db: Database, records: readonly CanonicalRecord[]): void {
-  for (const record of records) {
-    switch (record.record_kind) {
-      case "session":
-        insertSession(db, record as CanonicalSessionRecord);
-        break;
-      case "prompt":
-        insertPrompt(db, record as CanonicalPromptRecord);
-        break;
-      case "skill_invocation":
-        insertSkillInvocation(
-          db,
-          record as CanonicalSkillInvocationRecord as SkillInvocationWriteInput,
-        );
-        break;
-      case "execution_fact":
-        insertExecutionFact(db, record as CanonicalExecutionFactRecord);
-        break;
-      case "normalization_run":
-        break;
-    }
+  for (const record of records) insertCanonicalRecord(db, record);
+}
+
+function insertCanonicalRecord(db: Database, record: CanonicalRecord): void {
+  switch (record.record_kind) {
+    case "session":
+      insertSession(db, record);
+      break;
+    case "prompt":
+      insertPrompt(db, record);
+      break;
+    case "skill_invocation":
+      insertSkillInvocation(db, record);
+      break;
+    case "execution_fact":
+      insertExecutionFact(db, record);
+      break;
+    case "normalization_run":
+      break;
   }
 }
 
@@ -609,7 +590,7 @@ export function writeCronRunToDb(
     startedAt: string;
     elapsedMs: number;
     status: "success" | "error";
-    metrics?: Record<string, unknown>;
+    metrics?: Record<string, number | boolean>;
     error?: string;
   },
 ): void {
@@ -781,8 +762,7 @@ function insertSkillInvocation(
     si.normalized_at ?? new Date().toISOString(),
   );
 
-  // Cast to extended input to access optional usage fields
-  const ext = si as SkillInvocationWriteInput;
+  const localFields = decodeInvocationLocalFields(si);
 
   getStmt(
     db,
@@ -816,17 +796,17 @@ function insertSkillInvocation(
     si.tool_name ?? null,
     si.matched_prompt_id ?? null,
     si.agent_type ?? null,
-    ext.query ?? null,
-    ext.skill_path ?? null,
-    ext.skill_version_hash ?? null,
-    ext.skill_scope ?? null,
-    ext.source ?? null,
+    localFields.query ?? null,
+    localFields.skill_path ?? null,
+    si.skill_version_hash ?? null,
+    localFields.skill_scope ?? null,
+    localFields.source ?? null,
     si.schema_version ?? null,
     si.platform ?? null,
     si.normalized_at ?? null,
-    ext.normalizer_version ?? null,
-    ext.capture_mode ?? null,
-    ext.raw_source_ref ? JSON.stringify(ext.raw_source_ref) : null,
+    si.normalizer_version ?? null,
+    si.capture_mode ?? null,
+    si.raw_source_ref ? JSON.stringify(si.raw_source_ref) : null,
   );
 }
 

@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -50,6 +58,7 @@ describe("Skill Library filesystem reconciliation", () => {
         realpathSync(source),
         realpathSync(source),
       ]);
+      expect(snapshot.skills[0]?.instructionBytes).toBe(statSync(join(source, "SKILL.md")).size);
       expect(hashCalls).toBe(1);
     } finally {
       rmSync(root, { recursive: true, force: true });

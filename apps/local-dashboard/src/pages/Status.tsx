@@ -11,12 +11,13 @@ import {
   SettingsIcon,
   ShieldCheckIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
+import { fetchRuntimeHealth } from "@/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDoctor } from "@/hooks/useDoctor";
-import type { HealthCheck, HealthResponse, HealthStatus } from "@/types";
+import type { HealthCheck, HealthStatus } from "@/types";
 
 const STATUS_DISPLAY: Record<
   HealthStatus,
@@ -51,79 +52,80 @@ const STATUS_DISPLAY: Record<
   },
 };
 
-const CHECK_META: Record<string, { label: string; description: string; icon: ReactNode }> = {
-  config: {
-    label: "Configuration",
-    description: "selftune.json exists and contains valid agent_type and llm_mode",
-    icon: <SettingsIcon className="size-4" />,
-  },
-  log_session_telemetry: {
-    label: "Session Telemetry Log",
-    description: "session_telemetry_log.jsonl exists and records parse correctly",
-    icon: <FileTextIcon className="size-4" />,
-  },
-  log_skill_usage: {
-    label: "Skill Usage Log",
-    description: "skill_usage_log.jsonl exists and records parse correctly",
-    icon: <FileTextIcon className="size-4" />,
-  },
-  log_all_queries: {
-    label: "Query Log",
-    description: "all_queries_log.jsonl exists and records parse correctly",
-    icon: <FileTextIcon className="size-4" />,
-  },
-  log_evolution_audit: {
-    label: "Evolution Audit Log",
-    description: "evolution_audit_log.jsonl exists and records parse correctly",
-    icon: <FileTextIcon className="size-4" />,
-  },
-  hook_settings: {
-    label: "Hook Installation",
-    description: "Claude Code settings.json has all required selftune hooks configured",
-    icon: <PlugIcon className="size-4" />,
-  },
-  evolution_audit: {
-    label: "Evolution Health",
-    description: "Evolution audit log is intact and records are well-formed",
-    icon: <ShieldCheckIcon className="size-4" />,
-  },
-  dashboard_freshness_mode: {
-    label: "Dashboard Freshness",
-    description:
-      "The current dashboard still invalidates live updates from JSONL log watchers. SQLite WAL live invalidation has not been cut over yet.",
-    icon: <HardDriveIcon className="size-4" />,
-  },
-};
-
-function isHealthResponse(value: unknown): value is HealthResponse {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.workspace_root === "string" &&
-    typeof record.git_sha === "string" &&
-    typeof record.db_path === "string" &&
-    typeof record.process_mode === "string" &&
-    (record.watcher_mode === "wal" ||
-      record.watcher_mode === "jsonl" ||
-      record.watcher_mode === "none")
-  );
-}
+const CHECK_META = new Map([
+  [
+    "config",
+    {
+      label: "Configuration",
+      description: "selftune.json exists and contains valid agent_type and llm_mode",
+      icon: <SettingsIcon className="size-4" />,
+    },
+  ],
+  [
+    "log_session_telemetry",
+    {
+      label: "Session Telemetry Log",
+      description: "session_telemetry_log.jsonl exists and records parse correctly",
+      icon: <FileTextIcon className="size-4" />,
+    },
+  ],
+  [
+    "log_skill_usage",
+    {
+      label: "Skill Usage Log",
+      description: "skill_usage_log.jsonl exists and records parse correctly",
+      icon: <FileTextIcon className="size-4" />,
+    },
+  ],
+  [
+    "log_all_queries",
+    {
+      label: "Query Log",
+      description: "all_queries_log.jsonl exists and records parse correctly",
+      icon: <FileTextIcon className="size-4" />,
+    },
+  ],
+  [
+    "log_evolution_audit",
+    {
+      label: "Evolution Audit Log",
+      description: "evolution_audit_log.jsonl exists and records parse correctly",
+      icon: <FileTextIcon className="size-4" />,
+    },
+  ],
+  [
+    "hook_settings",
+    {
+      label: "Hook Installation",
+      description: "Claude Code settings.json has all required selftune hooks configured",
+      icon: <PlugIcon className="size-4" />,
+    },
+  ],
+  [
+    "evolution_audit",
+    {
+      label: "Evolution Health",
+      description: "Evolution audit log is intact and records are well-formed",
+      icon: <ShieldCheckIcon className="size-4" />,
+    },
+  ],
+  [
+    "dashboard_freshness_mode",
+    {
+      label: "Dashboard Freshness",
+      description:
+        "The current dashboard still invalidates live updates from JSONL log watchers. SQLite WAL live invalidation has not been cut over yet.",
+      icon: <HardDriveIcon className="size-4" />,
+    },
+  ],
+]);
 
 function RuntimeDetailsPanel({ refreshKey }: { refreshKey: number }) {
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-
-  useEffect(() => {
-    fetch("/api/health")
-      .then((res) => res.json())
-      .then((data: unknown) => {
-        if (isHealthResponse(data)) {
-          setHealth(data);
-        }
-      })
-      .catch(() => {
-        /* non-critical */
-      });
-  }, [refreshKey]);
+  const { data: health } = useQuery({
+    queryKey: ["runtime-health", refreshKey],
+    queryFn: fetchRuntimeHealth,
+    retry: false,
+  });
 
   if (!health) return null;
   const watcherBadge =
@@ -253,7 +255,7 @@ function RuntimeDetailsPanel({ refreshKey }: { refreshKey: number }) {
 }
 
 function CheckRow({ check }: { check: HealthCheck }) {
-  const meta = CHECK_META[check.name] ?? {
+  const meta = CHECK_META.get(check.name) ?? {
     label: check.name,
     description: "",
     icon: <HardDriveIcon className="size-4" />,

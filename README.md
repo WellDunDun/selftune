@@ -362,7 +362,6 @@ Your agent runs these — you just say what you want ("improve my skills", "show
 |              | `selftune recover`                                 | Recover SQLite from legacy/exported JSONL during migration or disaster recovery             |
 |              | `selftune badge --skill <name>`                    | Generate a health badge for your skill's README                                             |
 |              | `selftune telemetry`                               | Manage anonymous usage analytics (status, enable, disable)                                  |
-|              | `selftune alpha upload`                            | Run a manual SQLite-backed alpha upload cycle and emit a JSON send summary                  |
 
 Full command reference: `selftune --help`
 

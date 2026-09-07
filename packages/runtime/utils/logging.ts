@@ -5,7 +5,7 @@
 export interface Logger {
   info(message: string): void;
   warn(message: string): void;
-  error(message: string, err?: unknown): void;
+  error(message: string, cause?: unknown): void;
 }
 
 /**
@@ -14,13 +14,13 @@ export interface Logger {
  */
 export function createLogger(module: string): Logger {
   function emit(level: string, message: string, exception?: string): void {
-    const entry: Record<string, string> = {
+    const entry = {
       timestamp: new Date().toISOString(),
       level,
       module,
       message,
+      exception: exception || undefined,
     };
-    if (exception) entry.exception = exception;
     process.stderr.write(`${JSON.stringify(entry)}\n`);
   }
 
@@ -31,9 +31,9 @@ export function createLogger(module: string): Logger {
     warn(message: string) {
       emit("WARN", message);
     },
-    error(message: string, err?: unknown) {
+    error(message: string, cause?: unknown) {
       const exception =
-        err instanceof Error ? `${err.name}: ${err.message}\n${err.stack}` : undefined;
+        cause instanceof Error ? `${cause.name}: ${cause.message}\n${cause.stack}` : undefined;
       emit("ERROR", message, exception);
     },
   };

@@ -134,7 +134,7 @@ export interface EvidenceBodyEvolutionReviewSurfaceProps {
   readonly onAction?: (action: EvidenceBodyEvolutionReviewAction) => void;
 }
 
-const stateLabels: Record<EvidenceBodyEvolutionReviewState, string> = {
+const stateLabels = {
   loading: "Preparing review",
   insufficient_evidence: "Insufficient evidence",
   provider_unavailable: "Provider unavailable",
@@ -146,7 +146,7 @@ const stateLabels: Record<EvidenceBodyEvolutionReviewState, string> = {
   rejected: "Rejected",
   deferred: "Deferred",
   rolled_back: "Rolled back",
-};
+} satisfies Record<EvidenceBodyEvolutionReviewState, string>;
 
 export function EvidenceBodyEvolutionReviewSurface({
   review,
@@ -337,12 +337,12 @@ function ReviewActions({
   readonly actions: EvidenceBodyEvolutionReview["actions"];
   readonly onAction: EvidenceBodyEvolutionReviewSurfaceProps["onAction"];
 }) {
-  const labels: Record<EvidenceBodyEvolutionReviewAction, string> = {
-    accept: "Accept candidate",
-    edit: "Edit candidate",
-    reject: "Reject candidate",
-    defer: "Defer review",
-  };
+  const choices = [
+    ["accept", "Accept candidate"],
+    ["edit", "Edit candidate"],
+    ["reject", "Reject candidate"],
+    ["defer", "Defer review"],
+  ] satisfies Array<[EvidenceBodyEvolutionReviewAction, string]>;
   return (
     <Panel title="Review actions">
       <p className="text-sm text-muted-foreground">
@@ -350,7 +350,7 @@ function ReviewActions({
         install this mutation.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
-        {(Object.keys(labels) as EvidenceBodyEvolutionReviewAction[]).map((action) => {
+        {choices.map(([action, label]) => {
           const capability = actions?.[action];
           const enabled = capability?.access === "available" && onAction !== undefined;
           return (
@@ -362,7 +362,7 @@ function ReviewActions({
               className="rounded-md border border-border/60 px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               onClick={() => onAction?.(action)}
             >
-              {labels[action]}
+              {label}
             </button>
           );
         })}

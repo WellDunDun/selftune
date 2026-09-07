@@ -26,7 +26,7 @@ afterEach(() => {
   for (const root of temporaryRoots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-function disabled(action: keyof CreateCommandActions): CreateCommandActions[typeof action] {
+function disabled(action: keyof CreateCommandActions) {
   return () => Effect.fail(new CLIError(`Unexpected create ${action} call`, "INTERNAL_ERROR"));
 }
 
@@ -290,17 +290,33 @@ describe("Effect CLI create command family", () => {
       setExitCode: (code: number) => exitCodes.push(code),
     };
     await Effect.runPromise(
-      writeCreateActionResult("status", output, false, { state: "ready" }, () => "TTY", 0),
+      writeCreateActionResult(
+        "status",
+        output,
+        false,
+        () => {
+          throw new Error("JSON must remain lazy on a TTY");
+        },
+        () => "TTY",
+        0,
+      ),
     );
     await Effect.runPromise(
-      writeCreateActionResult("check", output, true, { ok: false }, () => "unused", 1),
+      writeCreateActionResult(
+        "check",
+        output,
+        true,
+        () => JSON.stringify({ ok: false }, null, 2),
+        () => "unused",
+        1,
+      ),
     );
     await Effect.runPromise(
       writeCreateActionResult(
         "replay",
         { ...output, isStdoutTTY: () => false },
         false,
-        { failed: 2 },
+        () => JSON.stringify({ failed: 2 }, null, 2),
         () => "unused",
         1,
       ),
@@ -324,9 +340,14 @@ describe("Effect CLI create command family", () => {
         },
       ].map((failingOutput) =>
         Effect.runPromise(
-          writeCreateActionResult("publish", failingOutput, false, {}, () => "value", 0).pipe(
-            Effect.flip,
-          ),
+          writeCreateActionResult(
+            "publish",
+            failingOutput,
+            false,
+            () => "{}",
+            () => "value",
+            0,
+          ).pipe(Effect.flip),
         ),
       ),
     );
@@ -341,7 +362,7 @@ describe("Effect CLI create command family", () => {
         "report",
         output,
         false,
-        {},
+        () => "{}",
         () => {
           throw new Error("format failed");
         },
@@ -351,6 +372,23 @@ describe("Effect CLI create command family", () => {
     expect(formatError).toMatchObject({
       code: "OPERATION_FAILED",
       suggestion: "selftune create report --help",
+    });
+    const jsonError = await Effect.runPromise(
+      writeCreateActionResult(
+        "scaffold",
+        output,
+        true,
+        () => {
+          throw new Error("JSON encoding failed");
+        },
+        () => "unused",
+        0,
+      ).pipe(Effect.flip),
+    );
+    expect(jsonError).toMatchObject({
+      code: "OPERATION_FAILED",
+      message: "JSON encoding failed",
+      suggestion: "selftune create scaffold --help",
     });
   });
 

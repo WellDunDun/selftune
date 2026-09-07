@@ -1,22 +1,23 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-
-interface MigrationJournal {
-  readonly entries: ReadonlyArray<{ readonly tag: string }>;
-}
+import * as Schema from "effect/Schema";
 
 const packageRoot = resolve(import.meta.dirname, "..");
 const migrationsRoot = join(packageRoot, "src", "drizzle");
 const journalPath = join(migrationsRoot, "meta", "_journal.json");
 const journal = await readFile(journalPath, "utf8");
-const parsed = JSON.parse(journal) as MigrationJournal;
+const parsed = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({ entries: Schema.Array(Schema.Struct({ tag: Schema.String })) }),
+  ),
+)(journal);
 const migrationEntries = await Promise.all(
   parsed.entries.map(async (entry) => {
     const relativePath = `${entry.tag}.sql`;
     return [relativePath, await readFile(join(migrationsRoot, relativePath), "utf8")] as const;
   }),
 );
-const embedded: Record<string, string> = {
+const embedded = {
   "meta/_journal.json": journal,
   ...Object.fromEntries(migrationEntries),
 };

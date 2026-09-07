@@ -1,3 +1,5 @@
+import { serviceFromLayer } from "../helpers/service-layer";
+import { WindowsInstallationStore } from "@selftune/local/service/windows/installation/store";
 import { afterEach, describe, expect, it } from "bun:test";
 import {
   chmod,
@@ -22,13 +24,14 @@ import * as Fiber from "effect/Fiber";
 import {
   makeLiveWindowsInstallationFileSystem,
   makeLiveWindowsServiceInstallationArtifactStore,
-  makeLiveWindowsServiceInstallationStore,
+  makeLiveWindowsInstallationStoreLayer,
   type LiveWindowsServiceInstallationArtifactFile,
   type LiveWindowsServiceInstallationArtifactFileSystem,
   type LiveWindowsInstallationFileSystemDependencies,
 } from "@selftune/local/service/windows/installation/live";
 import { windowsServiceArtifactQuarantinePath } from "@selftune/local/service/windows/artifact-store";
 import { sha256Hex } from "@selftune/local/service/windows/installation/model";
+import { WindowsInstallationIOError } from "@selftune/local/service/windows/installation/io-error";
 import type {
   WindowsInstallationCommandResult,
   WindowsInstallationProcess,
@@ -80,15 +83,18 @@ function artifactFileSystem(
 }
 
 async function expectFailureCause(
-  effect: Effect.Effect<void, unknown>,
+  effect: Effect.Effect<void, WindowsInstallationIOError>,
   expectedFailures: ReadonlyArray<unknown>,
 ): Promise<void> {
   const exit = await Effect.runPromiseExit(effect);
   expect(Exit.isFailure(exit)).toBe(true);
   if (Exit.isSuccess(exit)) return;
-  expect(exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error)).toEqual(
-    expectedFailures,
-  );
+  const errors = exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
+  expect(errors).toHaveLength(expectedFailures.length);
+  for (const [index, error] of errors.entries()) {
+    expect(error).toBeInstanceOf(WindowsInstallationIOError);
+    expect(error.cause).toBe(expectedFailures[index]);
+  }
 }
 
 afterEach(async () => {
@@ -111,7 +117,7 @@ describe("live Windows service installation dependencies", () => {
     expect((await stat(path)).mode & 0o777).toBe(0o600);
     await expect(
       Effect.runPromise(artifacts.write(path, new Uint8Array([9]))),
-    ).rejects.toMatchObject({ code: "EEXIST" });
+    ).rejects.toMatchObject({ operation: "openExclusive", cause: { code: "EEXIST" } });
     expect(new Uint8Array(await readFile(path))).toEqual(contents);
   });
 
@@ -121,7 +127,8 @@ describe("live Windows service installation dependencies", () => {
 
     await expect(Effect.runPromise(artifacts.read(join(directory, "missing")))).resolves.toBeNull();
     await expect(Effect.runPromise(artifacts.read(directory))).rejects.toMatchObject({
-      code: "EISDIR",
+      operation: "read",
+      cause: { code: "EISDIR" },
     });
   });
 
@@ -287,7 +294,7 @@ describe("live Windows service installation dependencies", () => {
 
     await expect(
       Effect.runPromise(writeArtifacts.write("artifact", new Uint8Array([1]))),
-    ).rejects.toBe(writeFailure);
+    ).rejects.toMatchObject({ operation: "writeAndSync", cause: writeFailure });
     expect(closedAfterWriteFailure).toBe(1);
 
     const closeFailure = new Error("close denied");
@@ -307,7 +314,7 @@ describe("live Windows service installation dependencies", () => {
 
     await expect(
       Effect.runPromise(closeArtifacts.write("artifact", new Uint8Array([1]))),
-    ).rejects.toBe(closeFailure);
+    ).rejects.toMatchObject({ operation: "close", cause: closeFailure });
   });
 
   it("fully writes and syncs a receipt temp before close and rename", async () => {
@@ -401,7 +408,7 @@ describe("live Windows service installation dependencies", () => {
       Effect.runPromise(
         fileSystem.writeUtf8File("receipt.tmp", "receipt", { flag: "wx", mode: 0o600 }),
       ),
-    ).rejects.toBe(syncFailure);
+    ).rejects.toMatchObject({ operation: "writeAndSync", cause: syncFailure });
     expect(events).toEqual(["open:receipt.tmp:600", "write", "sync", "close"]);
   });
 
@@ -494,7 +501,8 @@ describe("live Windows service installation dependencies", () => {
       Effect.runPromise(fileSystem.readUtf8File(join(directory, "missing.json"))),
     ).resolves.toBeNull();
     await expect(Effect.runPromise(fileSystem.readUtf8File(directory))).rejects.toMatchObject({
-      code: "EISDIR",
+      operation: "readUtf8File",
+      cause: { code: "EISDIR" },
     });
   });
 
@@ -513,7 +521,7 @@ describe("live Windows service installation dependencies", () => {
       Effect.runPromise(
         fileSystem.writeUtf8File(receiptTemp, "replacement", { flag: "wx", mode: 0o600 }),
       ),
-    ).rejects.toMatchObject({ code: "EEXIST" });
+    ).rejects.toMatchObject({ operation: "openExclusive", cause: { code: "EEXIST" } });
     expect(await readFile(receiptTemp, "utf8")).toBe("first");
     expect((await stat(receiptTemp)).mode & 0o777).toBe(0o600);
   });
@@ -537,7 +545,8 @@ describe("live Windows service installation dependencies", () => {
     try {
       await expect(Effect.runPromise(fileSystem.removeFile(directory))).rejects.toMatchObject({
         // Node reports EPERM on macOS and EISDIR on Linux for unlinking a directory.
-        code: expect.stringMatching(/^(?:EISDIR|EPERM)$/),
+        operation: "removeFile",
+        cause: { code: expect.stringMatching(/^(?:EISDIR|EPERM)$/) },
       });
     } finally {
       await chmod(directory, 0o700);
@@ -553,10 +562,13 @@ describe("live Windows service installation dependencies", () => {
           return commandResult(0, '"WORKGROUP\\Test","S-1-5-21-1000-2000-3000-4000"\r\n');
         }),
     };
-    const store = makeLiveWindowsServiceInstallationStore({
-      process,
-      systemRoot: "D:\\Windows",
-    });
+    const store = serviceFromLayer(
+      WindowsInstallationStore,
+      makeLiveWindowsInstallationStoreLayer({
+        process,
+        systemRoot: "D:\\Windows",
+      }),
+    );
 
     await expect(Effect.runPromise(store.resolveCurrentUserSid())).resolves.toBe(
       "S-1-5-21-1000-2000-3000-4000",

@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
 
 import type { WindowsServiceInstallationArtifactStore } from "../artifact-store.js";
 import { matchLegacyWindowsServiceTaskDefinition } from "./evidence.js";
@@ -56,6 +58,19 @@ function mapFailure<A, E, R>(operation: string, effect: Effect.Effect<A, E, R>) 
 
 function sameSid(left: string, right: string): boolean {
   return left.toLocaleLowerCase("en-US") === right.toLocaleLowerCase("en-US");
+}
+
+export class WindowsLegacyCleanupController extends Context.Service<
+  WindowsLegacyCleanupController,
+  ReturnType<typeof makeWindowsServiceLegacyCleanupController>
+>()("SelfTune/WindowsLegacyCleanupController") {}
+
+export function makeWindowsLegacyCleanupControllerLayer(
+  dependencies: WindowsServiceLegacyCleanupControllerDependencies,
+) {
+  return Layer.sync(WindowsLegacyCleanupController)(() =>
+    makeWindowsServiceLegacyCleanupController(dependencies),
+  );
 }
 
 export function makeWindowsServiceLegacyCleanupController(

@@ -1,4 +1,6 @@
 import { timeAgo } from "@selftune/ui/lib";
+import { DashboardActionName } from "@selftune/runtime/dashboard-contract/action-name";
+import * as Schema from "effect/Schema";
 import {
   Badge,
   Button,
@@ -18,12 +20,7 @@ import {
   useSelectedLiveActionEntry,
 } from "@/lib/live-action-feed";
 import { normalizeLifecycleCommand } from "@/lib/lifecycle-surface";
-import type {
-  DashboardActionName,
-  DashboardActionResultSummary,
-  DashboardSearchRunSummary,
-  SessionMeta,
-} from "@/types";
+import type { DashboardActionResultSummary, DashboardSearchRunSummary, SessionMeta } from "@/types";
 
 function statusBadge(status: "running" | "success" | "error") {
   if (status === "running") {
@@ -435,7 +432,8 @@ export function LiveRun() {
   const [searchParams, setSearchParams] = useSearchParams();
   const eventId = searchParams.get("event") || undefined;
   const skillName = searchParams.get("skill") || undefined;
-  const action = (searchParams.get("action") || undefined) as DashboardActionName | undefined;
+  const requestedAction = searchParams.get("action");
+  const action = Schema.is(DashboardActionName)(requestedAction) ? requestedAction : undefined;
 
   const entries = useLiveActionFeed();
   const selectedEntry = useSelectedLiveActionEntry({

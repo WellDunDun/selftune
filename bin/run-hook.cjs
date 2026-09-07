@@ -50,6 +50,8 @@ function daemonTarget() {
     const controlDir = join(resolveConfigDir(), "server-control");
     const manifest = JSON.parse(readFileSync(join(controlDir, "server.json"), "utf8"));
     const auth = JSON.parse(readFileSync(join(controlDir, "auth.json"), "utf8"));
+    // SAFETY-TYPEOF: These JSON files are an untrusted process boundary; exact primitive checks
+    // gate URL construction, process signaling, and bearer-token forwarding.
     if (
       !Number.isSafeInteger(manifest.pid) ||
       manifest.pid <= 1 ||
@@ -100,6 +102,8 @@ async function forwardToDaemon(hookName, rawStdin) {
     if (response.status === 202) return { exit_code: 0, stdout: "", stderr: "" };
     if (response.status !== 200) return null;
     const result = await response.json();
+    // SAFETY-TYPEOF: The daemon response crosses an HTTP boundary; validate the exact output
+    // primitives before writing them to the hook process streams.
     if (
       !Number.isInteger(result.exit_code) ||
       typeof result.stdout !== "string" ||

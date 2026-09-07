@@ -67,7 +67,7 @@ export class LocalTraceImportFailure extends Schema.TaggedErrorClass<LocalTraceI
 
 export interface LocalTraceImporterService {
   readonly importTrace: (
-    input: unknown,
+    input: LocalTraceImportRequest,
   ) => Effect.Effect<LocalTraceImportResult, LocalTraceImportFailure>;
 }
 

@@ -2,13 +2,7 @@ import { Effect, Result } from "effect";
 
 import { registryRequest } from "./client.js";
 import { RegistryHistoryResponse, RegistryLookupResponse } from "./contracts.js";
-import {
-  failure,
-  json,
-  registryFailure,
-  success,
-  type RegistryProgramInput,
-} from "./program-types.js";
+import { failure, registryFailure, success, type RegistryProgramInput } from "./program-types.js";
 
 export const runRegistryHistory = Effect.fn("selftune.registry.history")(function* (
   input: Extract<RegistryProgramInput, { operation: "history" }>,
@@ -28,7 +22,7 @@ export const runRegistryHistory = Effect.fn("selftune.registry.history")(functio
   if (Result.isFailure(response)) return registryFailure("history", response.failure);
   return success(
     "history",
-    json({
+    JSON.stringify({
       name: input.name,
       versions: response.success.versions.map((version) => ({
         version: version.version,

@@ -2,7 +2,7 @@ import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion";
 import { ChevronDownIcon } from "lucide-react";
 
 import { cn } from "../lib/utils";
-import { motion, type HTMLMotionProps, useReducedMotion } from "../motion";
+import { motion, useReducedMotion } from "../motion";
 
 const Accordion = AccordionPrimitive.Root;
 
@@ -35,18 +35,21 @@ function AccordionContent({ className, ...props }: AccordionContentProps) {
   return (
     <AccordionPrimitive.Panel
       keepMounted
-      render={(renderProps, state) => (
-        <motion.div
-          {...(renderProps as HTMLMotionProps<"div">)}
-          initial={false}
-          animate={
-            state.open
-              ? { height: "auto", opacity: 1, y: 0 }
-              : { height: 0, opacity: 0, y: shouldReduceMotion ? 0 : -4 }
-          }
-          transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: "easeOut" }}
-          className={cn("overflow-hidden pb-2 text-sm", className)}
-        />
+      className={className}
+      render={({ children, ...renderProps }, state) => (
+        <div {...renderProps} className={cn("overflow-hidden pb-2 text-sm", renderProps.className)}>
+          <motion.div
+            initial={false}
+            animate={
+              state.open
+                ? { height: "auto", opacity: 1, y: 0 }
+                : { height: 0, opacity: 0, y: shouldReduceMotion ? 0 : -4 }
+            }
+            transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: "easeOut" }}
+          >
+            {children}
+          </motion.div>
+        </div>
       )}
       {...props}
     />

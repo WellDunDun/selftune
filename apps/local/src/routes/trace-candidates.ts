@@ -1,4 +1,10 @@
 import { dashboardCorsHeaders, sameOriginFailure } from "../dashboard-http.js";
+import { Schema } from "effect";
+import { TraceCandidateRequest, type TraceCandidateReview } from "../trace-candidate-contract.js";
+import {
+  HistoricalSkillImprovementRequest,
+  type HistoricalSkillImprovementResponse,
+} from "../historical-skill-improvement-service.js";
 
 const MAX_TRACE_CANDIDATE_BYTES = 8 * 1024;
 
@@ -11,11 +17,13 @@ export interface TraceCandidateRoutes {
 }
 
 export interface TraceCandidateRouteOptions {
-  readonly prepare: (input: unknown) => Promise<unknown>;
-  readonly evaluate?: (input: unknown) => Promise<unknown>;
+  readonly prepare: (input: TraceCandidateRequest) => Promise<TraceCandidateReview>;
+  readonly evaluate?: (
+    input: HistoricalSkillImprovementRequest,
+  ) => Promise<HistoricalSkillImprovementResponse>;
 }
 
-async function readBoundedJson(request: Request): Promise<unknown> {
+async function readBoundedText(request: Request): Promise<string> {
   const declaredLength = Number.parseInt(request.headers.get("content-length") ?? "", 10);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_TRACE_CANDIDATE_BYTES) {
     throw new RangeError("Trace candidate request is too large.");
@@ -35,7 +43,7 @@ async function readBoundedJson(request: Request): Promise<unknown> {
     }
     body += decoder.decode(chunk.value, { stream: true });
   }
-  return JSON.parse(body + decoder.decode());
+  return body + decoder.decode();
 }
 
 export function createTraceCandidateRoutes(
@@ -54,22 +62,28 @@ export function createTraceCandidateRoutes(
       }
       const unauthorized = sameOriginFailure(request, allowedOrigins);
       if (unauthorized) return unauthorized;
-      if (action === "evaluate" && !options.evaluate) {
-        return Response.json(
-          {
-            error: {
-              code: "HISTORICAL_REPLAY_UNAVAILABLE",
-              message: "No managed replay harness is registered for historical evaluation.",
-            },
-          },
-          { status: 503, headers: dashboardCorsHeaders() },
-        );
-      }
       try {
-        const input = await readBoundedJson(request);
-        const result =
-          action === "prepare" ? await options.prepare(input) : await options.evaluate!(input);
-        return Response.json(result, {
+        if (action === "prepare") {
+          const input = Schema.decodeUnknownSync(Schema.fromJsonString(TraceCandidateRequest))(
+            await readBoundedText(request),
+          );
+          return Response.json(await options.prepare(input), { headers: dashboardCorsHeaders() });
+        }
+        if (!options.evaluate) {
+          return Response.json(
+            {
+              error: {
+                code: "HISTORICAL_REPLAY_UNAVAILABLE",
+                message: "No managed replay harness is registered for historical evaluation.",
+              },
+            },
+            { status: 503, headers: dashboardCorsHeaders() },
+          );
+        }
+        const input = Schema.decodeUnknownSync(
+          Schema.fromJsonString(HistoricalSkillImprovementRequest),
+        )(await readBoundedText(request));
+        return Response.json(await options.evaluate(input), {
           headers: dashboardCorsHeaders(),
         });
       } catch (error) {

@@ -1,3 +1,5 @@
+import type { queries, session_telemetry, skill_usage } from "@selftune/local-store/schema";
+import { Schema } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -358,6 +360,43 @@ describe("parseJsonlStream", () => {
     expect(result.assistant_turns).toBe(1);
   });
 
+  test("malformed optional evidence does not crash or discard valid fields and later events", () => {
+    const result = parseJsonlStream(
+      [
+        "null",
+        "[]",
+        "7",
+        '{"type":"thread.started","thread_id":23}',
+        '{"type":"session_meta","payload":{"instructions":false,"base_instructions":{"text":32}}}',
+        '{"type":"turn.completed","usage":{"input_tokens":"100","output_tokens":25}}',
+        '{"type":"turn.completed","usage":{"input_tokens":-20,"output_tokens":5}}',
+        '{"type":"item.completed","item":{"type":"command_execution","command":{},"exit_code":0}}',
+        '{"type":"response_item","payload":{"type":"message","role":"user","content":[null,4,{"text":12},{"text":"use $Research"}]}}',
+        '{"type":"thread.started","thread_id":"valid-thread"}',
+        '{"type":"turn.started"}',
+      ],
+      new Set(["Research"]),
+    );
+    expect(result.thread_id).toBe("valid-thread");
+    expect(result.input_tokens).toBe(0);
+    expect(result.output_tokens).toBe(30);
+    expect(result.assistant_turns).toBe(1);
+    expect(result.tool_calls.command_execution).toBe(1);
+    expect(result.bash_commands).toEqual([]);
+    expect(result.skills_triggered).toEqual(["Research"]);
+  });
+
+  test("a malformed exit status is not counted as a successful command", () => {
+    const result = parseJsonlStream(
+      [
+        '{"type":"item.completed","item":{"type":"command_execution","command":"false","exit_code":"0"}}',
+        '{"type":"item.completed","item":{"type":"command_execution","command":"true","exit_code":0}}',
+      ],
+      new Set(),
+    );
+    expect(result.errors_encountered).toBe(1);
+  });
+
   test("accumulates tokens across multiple turns", () => {
     const lines = [
       '{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":50}}',
@@ -375,8 +414,10 @@ describe("logQuery", () => {
 
     const db = getDb();
     const row = db
-      .query("SELECT session_id, query, source FROM queries WHERE session_id = ?")
-      .get("session-1") as { session_id: string; query: string; source: string } | null;
+      .query<Pick<typeof queries.$inferSelect, "session_id" | "query" | "source">, string[]>(
+        "SELECT session_id, query, source FROM queries WHERE session_id = ?",
+      )
+      .get("session-1");
     expect(row).toBeTruthy();
     expect(row?.session_id).toBe("session-1");
     expect(row?.query).toBe("build the app");
@@ -386,14 +427,18 @@ describe("logQuery", () => {
   test("skips short prompts", () => {
     logQuery("hi", "session-1");
     const db = getDb();
-    const count = (db.query("SELECT COUNT(*) as cnt FROM queries").get() as { cnt: number }).cnt;
+    const count = db
+      .query<{ cnt: number }, string[]>("SELECT COUNT(*) as cnt FROM queries")
+      .get()?.cnt;
     expect(count).toBe(0);
   });
 
   test("skips empty prompts", () => {
     logQuery("", "session-1");
     const db = getDb();
-    const count = (db.query("SELECT COUNT(*) as cnt FROM queries").get() as { cnt: number }).cnt;
+    const count = db
+      .query<{ cnt: number }, string[]>("SELECT COUNT(*) as cnt FROM queries")
+      .get()?.cnt;
     expect(count).toBe(0);
   });
 });
@@ -417,17 +462,21 @@ describe("logTelemetry", () => {
 
     const db = getDb();
     const row = db
-      .query(
+      .query<
+        Pick<
+          typeof session_telemetry.$inferSelect,
+          | "session_id"
+          | "cwd"
+          | "source"
+          | "tool_calls_json"
+          | "bash_commands_json"
+          | "last_user_query"
+        >,
+        string[]
+      >(
         "SELECT session_id, cwd, source, tool_calls_json, bash_commands_json, last_user_query FROM session_telemetry WHERE session_id = ?",
       )
-      .get("session-1") as {
-      session_id: string;
-      cwd: string;
-      source: string;
-      tool_calls_json: string;
-      bash_commands_json: string;
-      last_user_query: string;
-    } | null;
+      .get("session-1");
     expect(row).toBeTruthy();
     if (!row) {
       throw new Error("expected telemetry row");
@@ -435,8 +484,16 @@ describe("logTelemetry", () => {
     expect(row.session_id).toBe("session-1");
     expect(row.cwd).toBe("/home/user");
     expect(row.source).toBe("codex");
-    expect(JSON.parse(row.tool_calls_json).command_execution).toBe(2);
-    expect(JSON.parse(row.bash_commands_json)).toEqual(["ls", "pwd"]);
+    expect(
+      Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Number)))(
+        row.tool_calls_json,
+      ),
+    ).toEqual({ command_execution: 2 });
+    expect(
+      Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.String)))(
+        row.bash_commands_json,
+      ),
+    ).toEqual(["ls", "pwd"]);
     expect(row.last_user_query).toBe("build it");
   });
 });
@@ -447,17 +504,16 @@ describe("logSkillTrigger", () => {
 
     const db = getDb();
     const row = db
-      .query(
+      .query<
+        Pick<
+          typeof skill_usage.$inferSelect,
+          "session_id" | "skill_name" | "skill_path" | "query" | "triggered" | "source"
+        >,
+        string[]
+      >(
         "SELECT session_id, skill_name, skill_path, query, triggered, source FROM skill_usage WHERE session_id = ?",
       )
-      .get("session-1") as {
-      session_id: string;
-      skill_name: string;
-      skill_path: string;
-      query: string;
-      triggered: number;
-      source: string;
-    } | null;
+      .get("session-1");
     expect(row).toBeTruthy();
     expect(row?.session_id).toBe("session-1");
     expect(row?.skill_name).toBe("MySkill");
@@ -478,8 +534,10 @@ describe("logSkillTrigger", () => {
 
     const db = getDb();
     const row = db
-      .query("SELECT skill_path, skill_scope FROM skill_usage WHERE session_id = ?")
-      .get("session-1") as { skill_path: string; skill_scope: string | null } | null;
+      .query<Pick<typeof skill_usage.$inferSelect, "skill_path" | "skill_scope">, string[]>(
+        "SELECT skill_path, skill_scope FROM skill_usage WHERE session_id = ?",
+      )
+      .get("session-1");
     expect(row).toBeTruthy();
     expect(row?.skill_path).toEndWith(".agents/skills/MySkill/SKILL.md");
     expect(row?.skill_scope).toBe("project");

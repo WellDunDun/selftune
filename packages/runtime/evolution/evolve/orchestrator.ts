@@ -1,5 +1,6 @@
 /** Evolution pipeline orchestration. */
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import * as Schema from "effect/Schema";
 
 import type { BaselineMeasurement } from "../../eval/baseline.js";
 import { measureBaseline } from "../../eval/baseline.js";
@@ -13,17 +14,14 @@ import {
 import { updateContextAfterEvolve } from "../../memory/writer.js";
 import type { SyncResult } from "@selftune/source-management/sync";
 import type {
-  EvalEntry,
   EvalPassRate,
   EvolutionAuditEntry,
   EvolutionEvidenceEntry,
   EvolutionProposal,
   FailurePattern,
   ParetoCandidate,
-  QueryLogRecord,
-  SessionTelemetryRecord,
-  SkillUsageRecord,
 } from "../../types.js";
+import { EvalEntry } from "../../types/evaluation.js";
 import { CLIError } from "../../utils/cli-error.js";
 import { parseFrontmatter, replaceDescription } from "../../utils/frontmatter.js";
 import { createEvolveTUI } from "../../utils/tui.js";
@@ -81,7 +79,7 @@ export async function evolve(
     _deps.readSkillUsageLog ??
     (() => {
       const db = getDb();
-      return querySkillUsageRecords(db) as SkillUsageRecord[];
+      return querySkillUsageRecords(db);
     });
 
   const auditEntries: EvolutionAuditEntry[] = [];
@@ -136,16 +134,15 @@ export async function evolve(
     const descQualityAfterScore = r.proposal
       ? scoreDescription(r.proposal.proposed_description, options.skillName).composite
       : undefined;
-    return {
+    const result: EvolveResult = {
       ...r,
       llmCallCount,
       elapsedMs: Date.now() - pipelineStart,
-      ...(syncResult ? { sync_result: syncResult } : {}),
-      ...(descQualityBeforeScore != null
-        ? { descriptionQualityBefore: descQualityBeforeScore }
-        : {}),
-      ...(descQualityAfterScore != null ? { descriptionQualityAfter: descQualityAfterScore } : {}),
     };
+    if (syncResult) result.sync_result = syncResult;
+    if (descQualityBeforeScore != null) result.descriptionQualityBefore = descQualityBeforeScore;
+    if (descQualityAfterScore != null) result.descriptionQualityAfter = descQualityAfterScore;
+    return result;
   };
 
   // Hoisted so catch block and withStats can preserve partial results on error
@@ -208,10 +205,12 @@ export async function evolve(
     const skillUsage = _readSkillUsageLog();
     let evalSet: EvalEntry[];
 
-    if (evalSetPath && existsSync(evalSetPath)) {
+    if (evalSetPath) {
       try {
         const raw = readFileSync(evalSetPath, "utf-8");
-        evalSet = JSON.parse(raw) as EvalEntry[];
+        evalSet = Schema.decodeUnknownSync(
+          Schema.fromJsonString(Schema.mutable(Schema.Array(EvalEntry))),
+        )(raw);
       } catch (parseErr) {
         const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
         tui.fail(`Failed to load eval set from ${evalSetPath}: ${msg}`);
@@ -224,21 +223,10 @@ export async function evolve(
           reason: `Failed to load eval set: ${msg}`,
         });
       }
-      if (!Array.isArray(evalSet)) {
-        tui.fail(`Eval set at ${evalSetPath} is not an array`);
-        finishTui();
-        return withStats({
-          proposal: null,
-          validation: null,
-          deployed: false,
-          auditEntries,
-          reason: `Eval set at ${evalSetPath} is not a JSON array`,
-        });
-      }
     } else {
       // Build from logs
       const dbForQuery = getDb();
-      const queryRecords = queryQueryLog(dbForQuery) as QueryLogRecord[];
+      const queryRecords = queryQueryLog(dbForQuery);
       evalSet = _buildEvalSet(skillUsage, queryRecords, skillName);
     }
 
@@ -322,7 +310,7 @@ export async function evolve(
       (tokenEfficiencyEnabled
         ? (() => {
             const dbTel = getDb();
-            return querySessionTelemetry(dbTel) as SessionTelemetryRecord[];
+            return querySessionTelemetry(dbTel);
           })()
         : undefined);
 
@@ -895,15 +883,16 @@ export async function evolve(
           },
         });
         finishTui();
-        return withStats({
+        const result = withStats({
           proposal: lastProposal,
           validation: lastValidation,
           deployed: false,
           auditEntries,
           reason: `${gatePrefix} failed (${gateLabel}): net_change=${gateValidation.net_change.toFixed(3)}`,
           gateValidation,
-          ...(baselineResult ? { baselineResult } : {}),
         });
+        if (baselineResult) result.baselineResult = baselineResult;
+        return result;
       }
 
       recordAudit(
@@ -1001,10 +990,10 @@ export async function evolve(
       reason: wasDeployed
         ? "Evolution deployed successfully"
         : "Evolution not deployed: proposal or validation missing",
-      ...(skillVersion ? { skillVersion } : {}),
-      ...(baselineResult ? { baselineResult } : {}),
-      ...(gateValidation ? { gateValidation } : {}),
     });
+    if (skillVersion) evolveResult.skillVersion = skillVersion;
+    if (baselineResult) evolveResult.baselineResult = baselineResult;
+    if (gateValidation) evolveResult.gateValidation = gateValidation;
 
     if (lastProposal) {
       try {

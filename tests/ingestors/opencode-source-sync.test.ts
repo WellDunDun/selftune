@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,9 +9,11 @@ import {
   LocalTraceImportFailure,
   LocalTraceImportResult,
   LocalTraceImporter,
+  type LocalTraceImportRequest,
 } from "@selftune/observability";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 
 let root = "";
 let markerPath = "";
@@ -146,3 +148,58 @@ test("retries importer failures, advances only after receipt, and replays change
   await expect(run(successful)).resolves.toMatchObject({ synced: 1 });
   expect(calls).toBe(2);
 });
+
+const captureImports = (requests: LocalTraceImportRequest[]) =>
+  Layer.succeed(
+    LocalTraceImporter,
+    LocalTraceImporter.of({
+      importTrace: (request) =>
+        Effect.sync(() => {
+          requests.push(request);
+          return LocalTraceImportResult.make({ skill_failure_signals: [] });
+        }),
+    }),
+  );
+
+const readMarker = () =>
+  Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(
+    readFileSync(markerPath, "utf8"),
+  );
+
+test.each(["version", "sessions", "revision", "fingerprint", "null"] as const)(
+  "rebuilds an invalid %s marker from source without changing its analytical revision",
+  async (kind) => {
+    writeSource();
+    const requests: LocalTraceImportRequest[] = [];
+    const layer = captureImports(requests);
+    await run(layer);
+    const saved = readMarker();
+    const corrupt = {
+      version: { ...saved, marker_version: 5 },
+      sessions: { ...saved, sessions: [] },
+      revision: { ...saved, sessions: { "source-session": "invalid-revision" } },
+      fingerprint: { ...saved, source_fingerprint: "invalid-fingerprint" },
+      null: null,
+    };
+    writeFileSync(markerPath, JSON.stringify(corrupt[kind]));
+    await expect(run(layer)).resolves.toMatchObject({ scanned: 1, synced: 1 });
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.source_revision).toBe(requests[0]?.source_revision);
+    expect(readMarker()).toEqual(saved);
+  },
+);
+
+test.each([null, "1", -1, 1.5, 9007199254740992])(
+  "ignores an invalid optional scanned count without discarding valid revision receipts: %s",
+  async (scannedCount) => {
+    writeSource();
+    const requests: LocalTraceImportRequest[] = [];
+    const layer = captureImports(requests);
+    await run(layer);
+    const persisted = JSON.stringify({ ...readMarker(), scanned_sessions: scannedCount });
+    writeFileSync(markerPath, persisted);
+    await expect(run(layer)).resolves.toMatchObject({ scanned: 0, synced: 0 });
+    expect(requests).toHaveLength(1);
+    expect(readFileSync(markerPath, "utf8")).toBe(persisted);
+  },
+);
